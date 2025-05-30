@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>🐡🎤 Blobfish Boogie Bash 🎵🎧</title>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600&display=swap" rel="stylesheet" />
+  <style>
+    body {
+      font-family: 'Fredoka', sans-serif;
+      background-color: #87cefa;
+      margin: 0; padding: 0;
+      text-align: center;
+      color: white;
+      overflow-y: scroll;
+    }
+    h1 {
+      font-size: 2.4em;
+      margin-top: 30px;
+      text-shadow: 2px 2px #3498db;
+    }
+    #instructions {
+      background: #ffef7b;
+      color: #000000;
+      font-weight: 600;
+      font-size: 1.2em;
+      max-width: 600px;
+      margin: 20px auto 40px auto;
+      padding: 15px 25px;
+      border-radius: 15px;
+      line-height: 1.4;
+      user-select: none;
+      font-family: 'Fredoka', sans-serif;
+      box-shadow: 0 0 10px rgba(0,0,0,0.2);
+    }
+    #controls {
+      display: flex;
+      justify-content: center;
+      gap: 20px;
+      margin-bottom: 20px;
+    }
+    #controls button,
+    #skip-button {
+      font-family: 'Fredoka', sans-serif;
+      padding: 14px 30px;
+      font-size: 1em;
+      border-radius: 20px;
+      border: none;
+      cursor: pointer;
+      background-color: #ffffff;
+      color: #333;
+      transition: all 0.2s ease-in-out;
+    }
+    #controls button:hover,
+    #skip-button:hover {
+      background-color: #ffe2f3;
+      transform: scale(1.05);
+    }
+    #command {
+      font-size: 1.6em;
+      margin: 30px 0 20px;
+      color: #fff;
+      font-weight: 600;
+      animation: pop 0.4s ease-in-out;
+    }
+    @keyframes pop {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.15); }
+      100% { transform: scale(1); }
+    }
+    #grid-container {
+      position: relative;
+      width: 800px;
+      height: 800px;
+      margin: 0 auto;
+      z-index: 0;
+    }
+    #grid {
+      position: relative;
+      width: 800px;
+      height: 800px;
+    }
+    .bubble {
+      position: absolute;
+      width: 165px;
+      height: 165px;
+      border-radius: 50%;
+      background-color: transparent;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      z-index: 2;
+    }
+    .bubble img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      background: none;
+    }
+    .center-bubble {
+      width: 412.5px;
+      height: 412.5px;
+      pointer-events: none;
+      z-index: 0;
+    }
+    #skip-button {
+      margin-bottom: 20px;
+    }
+    #bottom-info {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      background-color: #3498db;
+      color: #ffef7b;
+      font-weight: 600;
+      font-size: 1.4em;
+      padding: 12px 20px;
+      user-select: none;
+      box-shadow: 0 -3px 10px rgba(0,0,0,0.3);
+      white-space: nowrap;
+      overflow-x: auto;
+      overflow-y: hidden;
+      text-align: left;
+      font-family: 'Fredoka', sans-serif;
+      z-index: 1000;
+    }
+  </style>
+</head>
+<body>
+
+<h1>🐡🎤 Blobfish Boogie Bash 🎵🎧</h1>
+
+<div id="instructions">
+  Click bubbles matching the command.<br />
+  If the command starts with <b>"Bloobfish says"</b>, follow it exactly.<br />
+  If it <b>does NOT say "Bloobfish says"</b>, do <b>NOT</b> click bubbles — click <b>Skip</b> instead to avoid losing points.<br />
+  Skip costs 1 point only if the command says <b>"Bloobfish says"</b>.<br />
+  Correct clicks earn points; wrong clicks lose points.<br />
+  Levels get faster as you progress. Have fun!
+</div>
+
+<div id="controls">
+  <button onclick="startGame()">Start</button>
+  <button onclick="pauseGame()">Pause</button>
+  <button onclick="resumeGame()">Resume</button>
+  <button onclick="stopGame()">Stop</button>
+</div>
+<button id="skip-button" onclick="skipCommand()">Skip</button>
+
+<div id="command">Get ready...</div>
+
+<div id="grid-container">
+  <div id="grid"></div>
+</div>
+
+<div id="bottom-info">
+  Score: 0 | High score: 0 | Level: 1 | Time Left: 20
+</div>
+
+<script>
+const instruments = [
+  { name: "Drum", sound: "Sounds  /joke-drums-242242.mp3", image: "Image of Bubbles /Blue Drums.png" },
+  { name: "Trumpet", sound: "Sounds  /Trumpet.mp3", image: "Image of Bubbles /Blue Trumpet.png" },
+  { name: "Recorder", sound: "Sounds  /recorder .mp3", image: "Image of Bubbles /Blue recorder .png" },
+  { name: "Violin", sound: "Sounds  /violin-.mp3", image: "Image of Bubbles /Blue Violin.png" },
+  { name: "Piano", sound: "Sounds  /piano .mp3", image: "Image of Bubbles /BluePiano.png" },
+  { name: "Triangle", sound: "Sounds  /triangle.mp3", image: "Image of Bubbles /Blue Triangle .png" },
+  { name: "Guitar", sound: "Sounds  /Guitar.mp3", image: "Image of Bubbles /Blue Guitar.png" },
+  { name: "Maracas", sound: "Sounds  /maracas.mp3", image: "Image of Bubbles / blue Maracas.png" },
+  { name: "Bloobfish", sound: "", image: "BLOBFISH IMAGE/Blobfish.png", isCenter: true }
+];
+
+const instrumentSounds = {};
+instruments.forEach(inst => {
+  if (inst.sound) {
+    instrumentSounds[inst.name] = new Audio(inst.sound);
+    instrumentSounds[inst.name].preload = 'auto';
+    instrumentSounds[inst.name].load();
+  }
+});
+
+const levels = [
+  { level: 1, timePerCommand: 30 },
+  { level: 2, timePerCommand: 27.5 },
+  { level: 3, timePerCommand: 24.5 },
+  { level: 4, timePerCommand: 21.5 },
+  { level: 5, timePerCommand: 17.5 },
+  { level: 6, timePerCommand: 12.5 },
+  { level: 7, timePerCommand: 7.5 }
+];
+
+const maxLevelIndex = levels.length - 1; // 6
+
+let score = 0;
+let highscore = 0;
+let currentLevelIndex = 0;
+let timeLeft = levels[currentLevelIndex].timePerCommand;
+let gameInterval;
+let command;
+let correctInstrument;
+let isBloobfishCommand = true;
+let currentSound = null;
+
+function shufflePositions() {
+  const grid = document.getElementById("grid");
+  grid.innerHTML = "";
+
+  const centerX = 400;
+  const centerY = 400;
+  const radius = 280;
+  const shuffled = instruments.slice().sort(() => 0.5 - Math.random());
+
+  let angleStep = (2 * Math.PI) / (shuffled.length - 1);
+  let index = 0;
+
+  shuffled.forEach((instrument, i) => {
+    const bubble = document.createElement("div");
+    bubble.classList.add("bubble");
+
+    const img = document.createElement("img");
+    img.src = instrument.image;
+    img.alt = instrument.name;
+    bubble.appendChild(img);
+
+    if (instrument.isCenter) {
+      bubble.classList.add("center-bubble");
+      bubble.style.left = `${centerX - 206.25}px`;
+      bubble.style.top = `${centerY - 206.25}px`;
+      bubble.style.zIndex = 0;
+    } else {
+      const angle = angleStep * index;
+      const x = centerX + radius * Math.cos(angle) - 82.5;
+      const y = centerY + radius * Math.sin(angle) - 82.5;
+      bubble.style.left = `${x}px`;
+      bubble.style.top = `${y}px`;
+      bubble.onclick = () => handleBubbleClick(instrument);
+      index++;
+    }
+    grid.appendChild(bubble);
+  });
+}
+
+function handleBubbleClick(instrument) {
+  if (timeLeft <= 0) return;
+
+  if (currentSound) {
+    currentSound.pause();
+    currentSound.currentTime = 0;
+  }
+
+  if (instrumentSounds[instrument.name]) {
+    currentSound = instrumentSounds[instrument.name];
+    currentSound.play();
+  }
+
+  const isCorrect = isBloobfishCommand && instrument.name === correctInstrument;
+  const isWrongClick = !isBloobfishCommand || instrument.name !== correctInstrument;
+
+  if (isCorrect) {
+    score += 1;
+  } else if (isWrongClick) {
+    score--;
+  }
+
+  updateUI();
+  nextCommand();
+}
+
+function getCurrentTimePerCommand(levelIndex) {
+  if (levelIndex > maxLevelIndex) {
+    // Keep max speed after level 7
+    return levels[maxLevelIndex].timePerCommand;
+  }
+  return levels[levelIndex].timePerCommand;
+}
+
+function nextCommand() {
+  shufflePositions();
+
+  // Increase level every 5 points (customizable)
+  currentLevelIndex = Math.floor(score / 5);
+
+  timeLeft = getCurrentTimePerCommand(currentLevelIndex);
+
+  const instrument = instruments[Math.floor(Math.random() * (instruments.length - 1))];
+  isBloobfishCommand = Math.random() < 0.7;
+  correctInstrument = instrument.name;
+  command = isBloobfishCommand ? `Bloobfish says play ${instrument.name}` : `Play ${instrument.name}`;
+  document.getElementById("command").innerText = command;
+
+  updateUI();
+}
+
+function updateUI() {
+  if (score > highscore) highscore = score;
+
+  const displayedLevel = currentLevelIndex + 1;
+
+  document.getElementById("bottom-info").textContent =
+    `Score: ${score} | High score: ${highscore} | Level: ${displayedLevel} | Time Left: ${Math.ceil(timeLeft)}`;
+}
+
+function gameTick() {
+  if (timeLeft > 0) {
+    timeLeft--;
+    updateUI();
+
+    if (timeLeft === 0) {
+      if (isBloobfishCommand) {
+        score--;
+      }
+      updateUI();
+      nextCommand();
+    }
+  }
+}
+
+function startGame() {
+  score = 0;
+  currentLevelIndex = 0;
+  timeLeft = levels[currentLevelIndex].timePerCommand;
+  updateUI();
+  nextCommand();
+
+  if (gameInterval) clearInterval(gameInterval);
+  gameInterval = setInterval(gameTick, 1000);
+}
+
+function pauseGame() {
+  if (gameInterval) clearInterval(gameInterval);
+}
+
+function resumeGame() {
+  if (!gameInterval) gameInterval = setInterval(gameTick, 1000);
+}
+
+function stopGame() {
+  if (gameInterval) clearInterval(gameInterval);
+  score = 0;
+  currentLevelIndex = 0;
+  timeLeft = levels[currentLevelIndex].timePerCommand;
+  updateUI();
+  document.getElementById("command").innerText = "Game stopped. Click Start to play!";
+}
+
+function skipCommand() {
+  if (timeLeft <= 0) return;
+
+  if (isBloobfishCommand) {
+    score--;
+  }
+
+  updateUI();
+  nextCommand();
+}
+
+window.onload = () => {
+  shufflePositions();
+  updateUI();
+};
+</script>
+
+</body>
+</html>

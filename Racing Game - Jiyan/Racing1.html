@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Time Racing Simulator – Phaser 3 (upright long-car)</title>
+  <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.js"></script>
+  <style>
+<style>
+  body {
+    margin: 0;
+    background: #121212;
+    color: #fff;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    overflow: hidden;
+  }
+
+  #ui {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 10;
+  }
+
+  #menu {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    background: rgba(18, 18, 18, 0.95);
+    pointer-events: auto;
+    padding: 20px;
+  }
+
+  #menu h1 {
+    font-size: 48px;
+    margin-bottom: 10px;
+    color: #00aaff;
+    text-shadow: 0 0 8px rgba(0, 170, 255, 0.5);
+  }
+
+  #menu p {
+    margin: 10px 0 20px;
+    font-size: 20px;
+    color: #ccc;
+  }
+
+  #colourSelect {
+    font-size: 18px;
+    padding: 5px 10px;
+    border-radius: 6px;
+    border: 1px solid #444;
+    background: #222;
+    color: #fff;
+  }
+
+  .btn {
+    background: #00aaff;
+    border: none;
+    color: white;
+    padding: 15px 30px;
+    margin: 10px;
+    font-size: 22px;
+    font-weight: bold;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.3s;
+  }
+
+  .btn:hover {
+    background: #008fcc;
+  }
+
+  #stats {
+  position: absolute;
+  bottom: 20px;
+  left: 20px;
+  font-size: 16px;
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.6);
+  border-radius: 6px;
+  border: 1px solid #00aaff;
+  pointer-events: none;
+  text-align: left;
+  color: #fff;
+}
+
+#minimap {
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  width: 160px;
+  height: 160px;
+  border: 2px solid #00aaff;
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 5px;
+  pointer-events: none;
+}
+
+</style>
+
+</head>
+<body>
+
+<!-- UI Overlay -->
+<div id="ui">
+  <div id="menu">
+    <h1>Time Racing Simulator</h1>
+    <p style="pointer-events:auto">
+      Car colour:
+      <select id="colourSelect">
+        <option value="0xff0000">Red</option>
+        <option value="0x00aaff">Blue</option>
+        <option value="0x00ff00">Green</option>
+      </select>
+    </p>
+    <button class="btn" onclick="boot(1)">Level&nbsp;1</button>
+    <button class="btn" onclick="boot(2)">Level&nbsp;2</button>
+    <button class="btn" onclick="boot(3)">Level&nbsp;3</button>
+  </div>
+
+  <div id="stats">⏱ 0 s<br>🚗 0 mph</div>
+  <canvas id="minimap" width="200" height="200"></canvas>
+
+</div>
+
+<script>
+const menu      = document.getElementById('menu');
+const statsText = document.getElementById('stats');
+const miniCtx   = document.getElementById('minimap').getContext('2d');
+const colourSel = document.getElementById('colourSelect');
+
+let game;
+
+function resetTimer(scene) {
+  startTime = scene.time.now;
+  elapsed = 0;
+  nextCheckpoint = 0;
+}
+
+let level = 1, carColour = 0xff0000;
+let worldH, roadW = 500;
+let car, cursors, obstacles, leftWall, rightWall;
+let checkpointY = [], nextCheckpoint = 0;
+let startTime = 0, elapsed = 0;
+
+function preload () {
+  const carCanvas = this.textures.createCanvas('car', 30, 60);
+  carCanvas.context.fillStyle = '#ffffff';
+  carCanvas.context.fillRect(0, 0, 30, 60);
+  carCanvas.refresh();
+
+  const blkCanvas = this.textures.createCanvas('block', 40, 40);
+  blkCanvas.context.fillStyle = '#777777';
+  blkCanvas.context.fillRect(0, 0, 40, 40);
+  blkCanvas.refresh();
+}
+
+// Add audio element to the body
+document.body.insertAdjacentHTML('beforeend', '<audio id="bgMusic" loop><source src="Sounds/Jazz.mp3" type="audio/mpeg"></audio>');
+
+function create () {
+  worldH = 3000 * level * 1.5;
+  this.cameras.main.setBounds(0, 0, 800, worldH);
+  this.physics.world.setBounds(0, 0, 800, worldH);
+
+  for (let y = 0; y < worldH; y += 60) {
+  const offset = Math.sin(y * 0.0008) * 100; // Adds a slight wave to the road
+  this.add.rectangle(400 + offset, y + 30, roadW, 60, 0x333333).setOrigin(0.5);
+}
+for (let y = 0; y < worldH; y += 40) {
+  const offset = Math.sin(y * 0.0008) * 100;
+  this.add.rectangle(400 + offset, y, 4, 20, 0xffffff).setOrigin(0.5);
+}
+
+
+  checkpointY = [];
+  const checkpointCount = 5 * level;
+for (let i = 0; i < checkpointCount; i++) {
+  const y = worldH - (i + 1) * 800;
+  const offset = Math.sin(y * 0.0008) * 100;
+  checkpointY.push(y);
+  this.add.rectangle(400 + offset, y, roadW, 4, 0xffff00).setOrigin(0.5);
+}
+nextCheckpoint = 0;
+
+
+  leftWall = this.physics.add.staticGroup();
+  rightWall = this.physics.add.staticGroup();
+
+for (let y = 0; y < worldH; y += 40) {
+  const offset = Math.sin(y * 0.0008) * 100;
+  const leftX = 400 + offset - roadW / 2;
+  const rightX = 400 + offset + roadW / 2;
+
+  // Visual walls (optional if you want to see them)
+  this.add.rectangle(leftX, y, 4, 40, 0xff0000).setOrigin(0.5); // red
+  this.add.rectangle(rightX, y, 4, 40, 0xff0000).setOrigin(0.5); // red
+
+
+  // Physics walls
+  leftWall.create(leftX, y, 'block').setSize(4, 40).setVisible(false);
+  rightWall.create(rightX, y, 'block').setSize(4, 40).setVisible(false);
+}
+
+
+  obstacles = this.physics.add.staticGroup();
+  for (let i = 0; i < 15 * level; i++) {
+  const y = Phaser.Math.Between(600, worldH - 1000);
+  const offset = Math.sin(y * 0.0008) * 100;
+  const x = Phaser.Math.Between(
+    400 + offset - roadW / 2 + 50,
+    400 + offset + roadW / 2 - 50
+  );
+  obstacles.create(x, y, 'block').setCircle(20);
+}
+
+
+  car = this.physics.add.image(400, worldH - 200, 'car')
+        .setTint(carColour)
+        .setCircle(30)
+        .setDamping(true).setDrag(600).setMaxVelocity(300);
+  car.setAngle(0);
+
+  cursors = this.input.keyboard.createCursorKeys();
+  this.cameras.main.startFollow(car, true, 0.1, 0.1);
+
+  const stop = () => car.setVelocity(0);
+  this.physics.add.collider(car, obstacles, stop);
+  this.physics.add.collider(car, leftWall, stop);
+  this.physics.add.collider(car, rightWall, stop);
+
+  this.input.keyboard.on('keydown-R', () => {
+    car.setPosition(400, worldH - 200);
+    car.setVelocity(0);
+    car.setAcceleration(0);
+    car.setAngularVelocity(0);
+    car.setAngle(0);
+    resetTimer(this);
+    // Replace Phaser audio with HTML5 audio
+    const music = document.getElementById('bgMusic');
+    music.volume = 0.5;
+    music.play().catch(e => console.log('Audio play failed:', e));
+    nextCheckpoint = 0;
+  });
+
+  this.input.keyboard.on('keydown-ESC', () => {
+    this.scene.pause();
+    menu.style.display = 'flex';
+  });
+
+  resetTimer(this);
+}
+
+function update () {
+  const accel = 500;
+  const headingRad = Phaser.Math.DegToRad(car.angle - 90);
+
+  if (cursors.up.isDown) {
+    this.physics.velocityFromRotation(headingRad, accel, car.body.acceleration);
+  } else if (cursors.down.isDown) {
+    this.physics.velocityFromRotation(headingRad, -accel / 2, car.body.acceleration);
+  } else {
+    car.setAcceleration(0);
+  }
+
+  if (cursors.left.isDown)        car.setAngularVelocity(-120);
+  else if (cursors.right.isDown)  car.setAngularVelocity(120);
+  else                            car.setAngularVelocity(0);
+
+  // ✅ ADD THIS BLOCK HERE: Prevent sideways drift
+  const forwardAngle = Phaser.Math.DegToRad(car.angle - 90);
+  const velocity = new Phaser.Math.Vector2(car.body.velocity.x, car.body.velocity.y);
+  const forward = new Phaser.Math.Vector2(Math.cos(forwardAngle), Math.sin(forwardAngle));
+  const forwardSpeed = velocity.dot(forward);
+  const newVelocity = forward.scale(forwardSpeed);
+  car.body.velocity.x = newVelocity.x;
+  car.body.velocity.y = newVelocity.y;
+
+  // Update stats and minimap
+  elapsed = Math.floor((this.time.now - startTime) / 1000);
+  statsText.innerHTML = `⏱ ${elapsed} s<br>🚗 ${Math.round(car.body.speed)} mph`;
+
+  if (nextCheckpoint < checkpointY.length && car.y < checkpointY[nextCheckpoint]) {
+    nextCheckpoint++;
+    if (nextCheckpoint >= checkpointY.length) {
+      this.scene.pause();
+      setTimeout(() => {
+        alert(`🏁  Finished in ${elapsed} s`);
+        menu.style.display = 'flex';
+      }, 50);
+    }
+  }
+
+  miniCtx.clearRect(0, 0, 200, 200);
+  miniCtx.fillStyle = '#1a1a1a';
+  miniCtx.fillRect(0, 0, 200, 200);
+  const scale = 200 / worldH;
+  miniCtx.fillStyle = 'grey';
+  obstacles.children.iterate(o => {
+  const offset = Math.sin(o.y * 0.0008) * 100; // same offset as track
+  const roadCenterX = 400 + offset;
+  if (o.x > roadCenterX - roadW / 2 && o.x < roadCenterX + roadW / 2) {
+    miniCtx.fillRect(o.x * 0.25 - 2, o.y * scale - 2, 5, 5);
+  }
+});
+
+  miniCtx.strokeStyle = 'yellow';
+  checkpointY.forEach(y => {
+    const my = y * scale;
+    miniCtx.beginPath(); miniCtx.moveTo(60, my); miniCtx.lineTo(140, my); miniCtx.stroke();
+  });
+  miniCtx.fillStyle = '#ffffff';
+  miniCtx.fillRect(car.x * 0.25 - 3, car.y * scale - 3, 6, 6);
+}
+function createGameButtons() {
+  let container = document.createElement('div');
+  container.id = 'gameButtons';
+  container.style.position = 'absolute';
+  container.style.top = '20px';
+  container.style.right = '20px';
+  container.style.zIndex = '20';
+  container.style.pointerEvents = 'auto';
+
+  const pauseBtn = document.createElement('button');
+  pauseBtn.className = 'btn';
+  pauseBtn.textContent = 'Pause';
+  pauseBtn.onclick = () => {
+    if (game.scene.isPaused('default')) {
+      game.scene.resume('default');
+      pauseBtn.textContent = 'Pause';
+    } else {
+      game.scene.pause('default');
+      pauseBtn.textContent = 'Resume';
+    }
+  };
+
+  const restartBtn = document.createElement('button');
+  restartBtn.className = 'btn';
+  restartBtn.textContent = 'Restart';
+  restartBtn.onclick = () => {
+    restartBtn.onclick = () => {
+  if (game) {
+    game.destroy(true);  // destroys the Phaser game instance
+    game = null;
+  }
+  boot(level);  // restart the current level
+};
+
+  };
+
+  container.appendChild(pauseBtn);
+  container.appendChild(restartBtn);
+
+  // Add instructions div here
+  const instructions = document.createElement('div');
+  instructions.style.marginTop = '15px';
+  instructions.style.color = '#fff';
+  instructions.style.fontFamily = "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif";
+  instructions.style.fontSize = '14px';
+  instructions.style.lineHeight = '1.4';
+  instructions.style.maxWidth = '220px';
+  instructions.style.pointerEvents = 'none';  // So clicks pass through
+  instructions.innerHTML = `
+    Welcome to timed racing simulator.<br>
+    To restart the timer and the level, click "R" or click the restart button.<br>
+    To move your car, use the arrow keys.<br>
+    To return to the home menu, click "esc".<br>
+    Thank you for playing. Good luck!
+  `;
+  container.appendChild(instructions);
+
+  document.body.appendChild(container);
+}
+
+
+function boot(lvl) {
+  level = lvl;
+  carColour = Number(colourSel.value);
+  menu.style.display = 'none';
+  createGameButtons();
+
+  // Reset the timer before creating the new game
+  startTime = 0;
+  elapsed = 0;
+  nextCheckpoint = 0;
+
+  const config = {
+    type: Phaser.AUTO,
+    width: window.innerWidth,
+    height: window.innerHeight,
+    backgroundColor: '#000000',
+    physics: {
+      default: 'arcade',
+      arcade: { gravity: { y: 0 }, debug: false }
+    },
+    scene: {
+      preload,
+      create: function () {
+        create.call(this);
+        resetTimer(this);  // Reset timer when the scene is created
+        const config = {
+  //...
+  scene: {
+    key: 'default',  // Add this line so the scene has a name
+    preload,
+    create: function () {
+      create.call(this);
+      resetTimer(this);
+    },
+    update
+  }
+};
+
+      },
+      update
+    }
+  };
+
+  // Destroy the previous game if it exists, then recreate it
+  if (game) {
+    game.destroy(true); // Cleanly destroy the previous game
+    setTimeout(() => {
+      game = new Phaser.Game(config);
+    }, 50);
+  } else {
+    game = new Phaser.Game(config);
+  }
+}
+
+
+window.addEventListener('resize', () => {
+  if (game && game.scale) {
+    game.scale.resize(window.innerWidth, window.innerHeight);
+  }
+});
+
+//There are many key imporvements that I made to my project, that included: adding in better develpoed levels, better obstacle designs, fixing the map boundaries and the layout, making the minimap more accurate and useful, and fixing the cars. I had many challenges when working with the obstacles and the car, there were issues with the obstacles boundaries and the car randomly kept hitting it. Also the car was randomly slowing down and there were other issues with the game boundaries. I was able to use Ai to guide me through and assist me in the code especially when debugging issues and there were issues wiht the game. I also got the help of Mr. Dec when I wasn't able to fix the boundaries because of the code limits and the single web page issues that I had. 
+//https://chatgpt.com/share/6838e801-3b50-800a-b211-9d55c470aecd
+</script>
+</body>
+</html>

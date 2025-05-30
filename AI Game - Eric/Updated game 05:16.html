@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Infinite NYC Runner</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { overflow: hidden; font-family: sans-serif; }
+    #gameContainer {
+      position: relative; width: 100vw; height: 100vh; overflow: hidden;
+    }
+    #skyline {
+      position: absolute; width: 100%; height: 100%;
+      background: lightblue url("Images/nyskyline.jpeg") repeat-x center bottom / cover;
+      z-index: -3;
+    }
+    .groundTile {
+      position: absolute; bottom: 0; width: 100px; height: 50px;
+      background-color: green; z-index: 0;
+    }
+    .obstacle {
+      position: absolute; bottom: 50px; width: 40px; height: 40px;
+      background-image: url('Images/Coffee Cup.png');
+      background-size: cover; background-repeat: no-repeat; z-index: 1;
+    }
+    #gameAssets {
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      pointer-events: none; z-index: 2;
+    }
+    .gameImage {
+      position: absolute; width: 70px; height: auto; bottom: 50px;
+      left: 100px; image-rendering: pixelated;
+    }
+    #skinSelector {
+      position: fixed; top: 15px; right: 15px; display: flex;
+      align-items: center; cursor: pointer; z-index: 5;
+      font-weight: bold; font-size: 16px;
+      background-color: rgba(255, 255, 255, 0.8);
+      padding: 5px 10px; border-radius: 8px;
+    }
+    .triangle {
+      width: 0; height: 0;
+      border-left: 8px solid transparent;
+      border-right: 8px solid transparent;
+      border-bottom: 12px solid black; margin-right: 8px;
+    }
+    #levelDisplay {
+      position: fixed; top: 15px; left: 15px; font-size: 18px;
+      background: rgba(255, 255, 255, 0.8); padding: 5px 10px;
+      border-radius: 8px; z-index: 5;
+    }
+    #winScreen {
+      position: fixed; top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      background: white; padding: 20px 40px;
+      border: 3px solid black; border-radius: 10px;
+      font-size: 24px; display: none; z-index: 10;
+    }
+    #instructions {
+      position: fixed; top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(255,255,255,0.95); padding: 30px;
+      border: 2px solid black; border-radius: 10px;
+      font-size: 18px; text-align: center; z-index: 20;
+    }
+  </style>
+</head>
+<body>
+  <div id="instructions">
+    <h2>How to Play</h2>
+    <p>Use <strong>Arrow Keys</strong> to move left/right</p>
+    <p>Press <strong>Space</strong> to jump</p>
+    <p>Click <strong>Skins</strong> to change your character</p>
+    <p>Jump over 10 obstacles to level up!</p>
+  </div>
+
+  <div id="levelDisplay">Level: 1</div>
+  <div id="winScreen">🎉 You beat 10 levels! 🎉</div>
+  <div id="gameContainer">
+    <div id="skyline"></div>
+    <div id="gameAssets">
+      <img src="Images/Guy.png" alt="Character" class="gameImage" id="character">
+    </div>
+  </div>
+
+  <div id="skinSelector">
+    <div class="triangle"></div>
+    <span>Skins</span>
+  </div>
+
+  <!-- 🎵 Sound effects -->
+  <audio id="runningSound" src="Sounds/Running Sounds.wav" loop></audio>
+  <audio id="jumpSound" src="Sounds/MarioJump.wav"></audio>
+
+  <script>
+    const character = document.getElementById('character');
+    const skyline = document.getElementById('skyline');
+    const levelDisplay = document.getElementById('levelDisplay');
+    const winScreen = document.getElementById('winScreen');
+    const instructions = document.getElementById('instructions');
+    const runningSound = document.getElementById('runningSound');
+    const jumpSound = document.getElementById('jumpSound');
+
+    const characterSkins = ["Images/Guy.png", "Images/Guy2.png", "Images/Ninja.png"];
+    let currentSkin = 0;
+
+    let positionY = 0, velocityY = 0, jumping = false;
+    let moveLeft = false, moveRight = false;
+    let worldOffset = 0;
+    let level = 1, jumpCount = 0, gameStarted = false;
+    const moveSpeed = 4;
+    let isMoving = false;
+    let obstacles = [], groundTiles = [];
+    let lastObstacleX = 1300;
+
+    document.getElementById('skinSelector').addEventListener('click', () => {
+      currentSkin = (currentSkin + 1) % characterSkins.length;
+      character.src = characterSkins[currentSkin];
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (!gameStarted) {
+        gameStarted = true;
+        instructions.remove();
+      }
+      if (e.code === 'ArrowRight') moveRight = true;
+      if (e.code === 'ArrowLeft') moveLeft = true;
+      if (e.code === 'Space' && !jumping) {
+        jumping = true;
+        velocityY = 20;
+        jumpSound.currentTime = 0;
+        jumpSound.play();
+      }
+    });
+
+    document.addEventListener('keyup', (e) => {
+      if (e.code === 'ArrowRight') moveRight = false;
+      if (e.code === 'ArrowLeft') moveLeft = false;
+    });
+
+    function spawnObstacle(x) {
+      const obstacle = document.createElement('div');
+      obstacle.className = 'obstacle';
+      obstacle.style.left = x + 'px';
+      obstacle.passed = false;
+      document.getElementById('gameContainer').appendChild(obstacle);
+      obstacles.push(obstacle);
+    }
+
+    function spawnGroundTile(x) {
+      const tile = document.createElement('div');
+      tile.className = 'groundTile';
+      tile.style.left = x + 'px';
+      document.getElementById('gameContainer').appendChild(tile);
+      groundTiles.push(tile);
+    }
+
+    for (let i = 0; i < 20; i++) spawnGroundTile(i * 100);
+
+    function addMoreObstaclesIfNeeded() {
+      const farthestRight = obstacles.length > 0
+        ? parseFloat(obstacles[obstacles.length - 1].style.left)
+        : 0;
+      if (farthestRight < window.innerWidth + 500) {
+        lastObstacleX += 500;
+        spawnObstacle(lastObstacleX);
+      }
+    }
+
+    function gameLoop() {
+      const currentlyMoving = moveLeft || moveRight;
+
+      if (currentlyMoving && !isMoving) {
+        runningSound.play();
+        isMoving = true;
+      } else if (!currentlyMoving && isMoving) {
+        runningSound.pause();
+        runningSound.currentTime = 0;
+        isMoving = false;
+      }
+
+      if (moveRight) worldOffset -= moveSpeed;
+      if (moveLeft) worldOffset += moveSpeed;
+      skyline.style.backgroundPositionX = worldOffset + 'px';
+
+      const charRect = character.getBoundingClientRect();
+
+      obstacles.forEach(obstacle => {
+        const left = parseFloat(obstacle.style.left) + (moveLeft ? moveSpeed : (moveRight ? -moveSpeed : 0));
+        obstacle.style.left = left + 'px';
+
+        const obsRect = obstacle.getBoundingClientRect();
+        const isTouching =
+          charRect.bottom > obsRect.top &&
+          charRect.top < obsRect.bottom &&
+          charRect.right > obsRect.left &&
+          charRect.left < obsRect.right;
+
+        if (isTouching && !jumping && gameStarted) {
+          alert('You hit an obstacle! Restarting...');
+          location.reload();
+        }
+
+        if (charRect.left > obsRect.right && !obstacle.passed) {
+          obstacle.passed = true;
+          jumpCount++;
+          if (jumpCount >= 10) {
+            level++;
+            levelDisplay.textContent = 'Level: ' + level;
+            jumpCount = 0;
+            if (level % 10 === 0) {
+              winScreen.style.display = 'block';
+              setTimeout(() => winScreen.style.display = 'none', 3000);
+            }
+          }
+        }
+      });
+
+      groundTiles.forEach((tile, index) => {
+        const left = parseFloat(tile.style.left) + (moveLeft ? moveSpeed : (moveRight ? -moveSpeed : 0));
+        tile.style.left = left + 'px';
+
+        if (left < -100) {
+          tile.remove();
+          groundTiles.splice(index, 1);
+          spawnGroundTile(
+            groundTiles.length ? parseFloat(groundTiles[groundTiles.length - 1].style.left) + 100 : 1000
+          );
+        }
+      });
+
+      if (jumping) {
+        velocityY -= 0.5;
+        positionY += velocityY;
+        if (positionY <= 0) {
+          positionY = 0;
+          jumping = false;
+          velocityY = 0;
+          jumpSound.pause();
+          jumpSound.currentTime = 0;
+        }
+      }
+
+      character.style.bottom = (50 + positionY) + 'px';
+      addMoreObstaclesIfNeeded();
+      requestAnimationFrame(gameLoop);
+    }
+
+    gameLoop();
+  </script>
+</body>
+</html>
