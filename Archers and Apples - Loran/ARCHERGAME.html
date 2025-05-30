@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Mono&display=swap" rel="stylesheet">
+<meta charset="UTF-8">
+<title>Skeleton Archer Game</title>
+<style>
+  body, #menu, #gameCanvas {
+    transition: opacity 0.5s ease;
+  }
+  body { margin: 0; background: #87CEEB; overflow: hidden; font-family: Arial, sans-serif; }
+  canvas { display: none; border: 2px solid #000; margin: 0 auto; background: #fff; }
+  #menu {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    display: flex; flex-direction: column; gap: 10px; align-items: center;
+  }
+  #menu button, #pauseButton {
+    padding: 10px 20px; font-size: 16px; cursor: pointer;
+  }
+  #pauseText { display: none; font-size: 32px; color: red; text-shadow: 1px 1px #000; position: absolute; top: 10px; left: 50%; transform: translateX(-50%); }
+  #pauseButton { position: absolute; top: 10px; right: 10px; z-index: 2; display: none; }
+</style>
+</head>
+<body>
+<div id="menu">
+   <div style="text-align: center; margin-bottom: 20px;">
+ <h1 style="font-family: 'Roboto Mono', monospace; font-size: 36px; text-shadow: 0 0 5px red, 0 0 10px green;">
+   <span style="color: green;">Archers</span>
+   <span style="color: brown;">and</span>
+   <span style="color: red;">Apples</span>
+ </h1>
+ <p style="max-width: 600px; margin: 0 auto; font-family: 'Roboto Mono', monospace; font-size: 14px; color: #333;">
+   Welcome to Archers and Apples!<br><br>
+   Use your bow to shoot arrows by clicking and holding to charge, then releasing to fire. Target the enemies before they shoot you!<br><br>
+   Collect falling health and stamina apples by hitting them with arrows. Red apples restore health, green apples restore stamina.<br><br>
+   Survive incoming enemy waves and defeat boss enemies that appear every 25 points! Each boss is tougher than the last and spawns extra enemies when defeated.<br><br>
+   Reach new high scores and test your archery reflexes. Good luck!
+ </p>
+</div>
+  <div id="highScoreDisplay" style="padding: 10px 20px; font-size: 16px; font-weight: bold; font-family: 'Roboto Mono', monospace; cursor: default; background-color: #a0522d; border: 3px solid #ffff33; color: #ffff33; text-shadow: 0 0 5px #ffff33, 0 0 10px #ffff33;">High Score: 0</div>
+  <button onclick="startGame()">Play</button>
+  <button>Skins</button>
+</div>
+<div id="pauseText">Game is paused</div>
+<button id="pauseButton" onclick="togglePause()">Pause</button>
+<canvas id="gameCanvas" width="800" height="600"></canvas>
+<audio id="gameMusic" src="668879__zhr__retroclassic-game-music.wav" loop></audio>
+<button id="menuButton" onclick="returnToMenu()" style="position:absolute; top:10px; left:10px; z-index:2; display:none; padding: 10px 20px; font-size: 16px; cursor: pointer;">Return to Menu</button>
+<audio id="hitSound" src="350976__cabled_mess__boom_c_01.wav"></audio>
+<audio id="shootSound" src="588015__deadrobotmusic__dr-hi-hat-151.wav"></audio>
+<script>
+  // Moved script contents to ensure structure is clean and all bugs are resolved
+  window.onload = function() {
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const hitSound = document.getElementById('hitSound');
+    const shootSound = document.getElementById('shootSound');
+
+
+
+
+    let arrows = [], enemyArrows = [], enemies = [], enemyPlatforms = [], apples = [], score = 0, highScore = 0, lastAppleTime = Date.now();
+    let isCharging = false, chargeStartTime = 0, mouseX = 0, mouseY = 0;
+    let playerHealth = 250, playerStamina = 200, isDead = false, lastStaminaTime = Date.now();
+    let gameStarted = false, paused = false, criticalHitMessage = null, lastDeathTime = 0;
+
+
+
+
+    const groundY = canvas.height - 50;
+    const playerPlatform = { x: 100, y: groundY - 100, width: 40, height: 100 };
+    const archer = { x: playerPlatform.x + playerPlatform.width / 2, y: playerPlatform.y, width: 20, height: 50 };
+
+
+
+
+    window.startGame = function() {
+      document.getElementById('gameMusic').play();
+      document.getElementById('menuButton').style.display = 'block';
+      document.getElementById('menu').style.opacity = 0;
+      setTimeout(() => document.getElementById('menu').style.display = 'none', 500);
+      canvas.style.opacity = 0;
+      canvas.style.display = 'block';
+      setTimeout(() => canvas.style.opacity = 1, 0);
+      document.getElementById('pauseButton').style.display = 'block';
+      gameStarted = true;
+      requestAnimationFrame(gameLoop);
+    };
+
+
+
+
+    window.returnToMenu = function() {
+      if (score > highScore) highScore = score;
+      document.getElementById('highScoreDisplay').textContent = `High Score: ${highScore}`;
+      document.getElementById('gameMusic').pause();
+      document.getElementById('gameMusic').currentTime = 0;
+      canvas.style.opacity = 0;
+      document.getElementById('pauseButton').style.display = 'none';
+      document.getElementById('menuButton').style.display = 'none';
+
+
+
+
+      // Reset game state
+      arrows = [];
+      enemyArrows = [];
+      enemies = [];
+      enemyPlatforms = [];
+      score = 0;
+      playerHealth = 250;
+      playerStamina = 200;
+      isDead = false;
+      isCharging = false;
+      gameStarted = false;
+      paused = false;
+      document.getElementById('pauseText').style.display = 'none';
+
+
+
+
+      setTimeout(() => {
+        canvas.style.display = 'none';
+        const menu = document.getElementById('menu');
+        menu.style.display = 'flex';
+        setTimeout(() => menu.style.opacity = 1, 0);
+      }, 500);
+    };
+
+
+
+
+    window.togglePause = function() {
+      paused = !paused;
+      document.getElementById('pauseText').style.display = paused ? 'block' : 'none';
+    };
+
+
+
+
+    function spawnEnemy() {
+      if (enemies.length === 0) {
+        const heights = [groundY - 300, groundY - 200, groundY - 100];
+        const baseY = heights[Math.floor(Math.random() * heights.length)];
+        const y = baseY + (Math.random() - 0.5) * 80;
+        const x = canvas.width - 150 + (Math.random() - 0.5) * 120;
+        enemies.push({ x, y, radius: 20, health: 20, nextShotTime: Date.now() + 5000, platformExpire: null });
+        enemyPlatforms.push({ x: x - 30, y: y + 20, width: 60, height: 10, visible: true });
+      }
+    }
+
+
+
+
+    canvas.addEventListener('mousedown', () => {
+      if (!isDead && playerStamina >= 5 && !paused) {
+        isCharging = true;
+        chargeStartTime = Date.now();
+      }
+    });
+
+
+
+
+    canvas.addEventListener('mouseup', () => {
+      if (isCharging && !isDead && !paused) fireArrow();
+    });
+
+
+
+
+    canvas.addEventListener('mousemove', (e) => {
+      const rect = canvas.getBoundingClientRect();
+      mouseX = e.clientX - rect.left;
+      mouseY = e.clientY - rect.top;
+    });
+
+
+
+
+    function fireArrow(auto = false) {
+      isCharging = false;
+      const duration = (Date.now() - chargeStartTime) / 1000;
+      const power = auto ? 120 : Math.min(duration, 10) * 10;
+      // Stamina is now drained over time while charging, not on release
+      const angle = Math.atan2(mouseY - archer.y, mouseX - archer.x);
+      arrows.push({ x: archer.x, y: archer.y, angle, speed: power });
+      shootSound.play();
+    }
+
+
+
+
+    function drawApples() {
+      apples.forEach(a => {
+        ctx.beginPath();
+        ctx.arc(a.x, a.y, 14, 0, Math.PI * 2);
+        ctx.fillStyle = a.type === 'health' ? '#DD1533' : '#8DB600';
+        ctx.fill();
+        // Draw stem
+        ctx.beginPath();
+        ctx.strokeStyle = 'brown';
+        ctx.lineWidth = 2;
+        ctx.moveTo(a.x, a.y - 14);
+        ctx.lineTo(a.x, a.y - 20);
+        ctx.stroke();
+      });
+    }
+
+
+
+
+    function updateApples() {
+      if (Date.now() - lastAppleTime > 30000) {
+        const x = Math.random() * canvas.width * 0.5 + 100;
+        const y = groundY - 10;
+        const type = Math.random() < 0.5 ? 'health' : 'stamina';
+        apples.push({ x, y, vy: -6, gravity: 0.05, type });
+        lastAppleTime = Date.now();
+      }
+
+
+
+
+      apples.forEach(a => {
+        a.y += a.vy;
+        a.vy += a.gravity;
+      });;
+      apples = apples.filter(a => a.y > 0);
+    }
+
+
+
+
+    function gameLoop() {
+      if (isCharging && !isDead && !paused) {
+        const elapsed = Date.now() - chargeStartTime;
+        const staminaDrain = Math.floor(elapsed / 700) - Math.floor((elapsed - 16) / 700);
+        playerStamina = Math.max(0, playerStamina - staminaDrain * 2);
+        if (playerStamina <= 0) {
+          isCharging = false;
+        }
+      }
+      if (!gameStarted || paused) {
+        requestAnimationFrame(gameLoop);
+        return;
+      }
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      if (enemies.length === 0) spawnEnemy();
+      if (isCharging && !isDead && Date.now() - chargeStartTime >= 10000) fireArrow(true);
+      if (!isCharging && Date.now() - lastStaminaTime > 1000) {
+        playerStamina = Math.min(200, playerStamina + 1);
+        lastStaminaTime = Date.now();
+      }
+      drawPlatform(playerPlatform.x, playerPlatform.y, playerPlatform.width, playerPlatform.height);
+      drawPlatform(0, groundY, canvas.width, 20);
+      drawArcher(); drawChargingArrow(); drawEnemies();
+      drawArrows(arrows, 'black'); drawArrows(enemyArrows, 'red'); drawApples(); drawUI();
+      arrows = updateArrows(arrows); enemyArrows = updateArrows(enemyArrows);
+      updateEnemies(); updateApples(); checkHits();
+      requestAnimationFrame(gameLoop);
+    }
+
+
+
+
+    function drawPlatform(x, y, w, h) {
+      ctx.fillStyle = 'sienna';
+      ctx.fillRect(x, y, w, h);
+    }
+    function drawArcher() {
+      ctx.fillStyle = 'gray';
+      ctx.fillRect(archer.x - archer.width / 2, archer.y - archer.height, archer.width, archer.height);
+      ctx.beginPath(); ctx.strokeStyle = 'brown'; ctx.lineWidth = 4;
+      ctx.arc(archer.x, archer.y - archer.height / 2, 25, Math.PI / 2, -Math.PI / 2, true); ctx.stroke();
+    }
+    function drawChargingArrow() {
+      if (isCharging) {
+        ctx.strokeStyle = 'black'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(archer.x, archer.y - archer.height / 2);
+        ctx.lineTo(mouseX, mouseY); ctx.stroke();
+      }
+    }
+    function drawArrow(x, y, angle, color) {
+      const len = 20, tipX = x + Math.cos(angle) * len, tipY = y + Math.sin(angle) * len;
+      ctx.strokeStyle = color; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(tipX, tipY); ctx.stroke();
+      const s = 5;
+      const leftX = tipX - Math.cos(angle - Math.PI / 6) * s;
+      const leftY = tipY - Math.sin(angle - Math.PI / 6) * s;
+      const rightX = tipX - Math.cos(angle + Math.PI / 6) * s;
+      const rightY = tipY - Math.sin(angle + Math.PI / 6) * s;
+      ctx.beginPath(); ctx.moveTo(tipX, tipY); ctx.lineTo(leftX, leftY);
+      ctx.moveTo(tipX, tipY); ctx.lineTo(rightX, rightY); ctx.stroke();
+    }
+    function drawArrows(list, color) {
+      list.forEach(arrow => drawArrow(arrow.x, arrow.y, arrow.angle, color));
+    }
+    function updateArrows(list) {
+      return list.filter(arrow => {
+        arrow.x += Math.cos(arrow.angle) * arrow.speed;
+        arrow.y += Math.sin(arrow.angle) * arrow.speed;
+        return arrow.x >= 0 && arrow.x <= canvas.width && arrow.y >= 0 && arrow.y <= canvas.height;
+      });
+    }
+    function drawEnemies() {
+      enemies.forEach(enemy => {
+        ctx.fillStyle = 'orange'; ctx.beginPath();
+        ctx.arc(enemy.x, enemy.y, enemy.radius, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.strokeStyle = 'brown'; ctx.lineWidth = 4;
+        ctx.arc(enemy.x - 10, enemy.y, 25, Math.PI / 2, -Math.PI / 2, true); ctx.stroke();
+      });
+      enemyPlatforms.forEach(p => p.visible && drawPlatform(p.x, p.y, p.width, p.height));
+    }
+    function updateEnemies() {
+      enemies.forEach(enemy => {
+        if (Date.now() > enemy.nextShotTime) {
+          const dx = archer.x - enemy.x, dy = archer.y - enemy.y;
+          let angle = Math.atan2(dy + (Math.random() - 0.5) * 60, dx);
+          if (Math.cos(angle) > 0) angle = Math.PI;
+          enemyArrows.push({ x: enemy.x, y: enemy.y, angle, speed: Math.random() * 3 + 2 });
+          shootSound.play();
+          enemy.nextShotTime = Date.now() + 5000;
+        }
+      });
+      enemyPlatforms.forEach(p => { if (p.expireTime && Date.now() > p.expireTime) p.visible = false; });
+    }
+    function checkHits() {
+      // Arrow vs apple
+      arrows = arrows.filter(a => {
+        for (let i = 0; i < apples.length; i++) {
+          const dx = a.x - apples[i].x;
+          const dy = a.y - apples[i].y;
+          if (Math.sqrt(dx * dx + dy * dy) < 15) {
+            const apple = apples[i];
+            if (apple.type === 'health') playerHealth = Math.min(250, playerHealth + 15);
+            else playerStamina = Math.min(200, playerStamina + 20);
+            apples.splice(i, 1);
+            return false;
+          }
+        }
+        return true;
+      });
+      let criticalHit = null;
+      let arrowHitIndex = -1, enemyArrowHitIndex = -1;
+
+
+
+
+      for (let i = 0; i < arrows.length; i++) {
+        for (let j = 0; j < enemyArrows.length; j++) {
+          const dx = arrows[i].x - enemyArrows[j].x;
+          const dy = arrows[i].y - enemyArrows[j].y;
+          if (Math.sqrt(dx * dx + dy * dy) < 10) {
+            criticalHit = {
+              x: (arrows[i].x + enemyArrows[j].x) / 2,
+              y: (arrows[i].y + enemyArrows[j].y) / 2,
+              timer: Date.now()
+            };
+            arrowHitIndex = i;
+            enemyArrowHitIndex = j;
+            break;
+          }
+        }
+        if (criticalHit) break;
+      }
+
+
+
+
+      if (criticalHit) {
+        arrows.splice(arrowHitIndex, 1);
+        enemyArrows.splice(enemyArrowHitIndex, 1);
+
+
+
+
+        for (let k = 0; k < enemies.length; k++) {
+          enemies[k].health -= 20;
+          if (enemies[k].health <= 0) {
+            enemyPlatforms[k].expireTime = Date.now() + 3000;
+            enemies.splice(k, 1);
+            enemyPlatforms.splice(k, 1);
+            score++;
+            setTimeout(spawnEnemy, 3000);
+            break;
+          }
+        }
+
+
+
+
+        criticalHitMessage = {
+          x: criticalHit.x - 100,
+          y: criticalHit.y,
+          time: Date.now()
+        };
+      }
+
+
+
+
+      arrows = arrows.filter(a => {
+        for (let i = 0; i < enemies.length; i++) {
+          const e = enemies[i], dx = a.x - e.x, dy = a.y - e.y;
+          if (Math.abs(dx) <= e.radius + 10 && Math.abs(dy) <= e.radius + 10) {
+            hitSound.play();
+            e.health -= 10;
+            if (e.health <= 0) {
+              let plat = enemyPlatforms[i];
+              plat.expireTime = Date.now() + 3000;
+              enemies.splice(i, 1);
+              enemyPlatforms.splice(i, 1);
+              setTimeout(spawnEnemy, 3000);
+              score++;
+            }
+            return false;
+          }
+        }
+        return true;
+      });
+
+
+
+
+      enemyArrows = enemyArrows.filter(a => {
+        const dx = a.x - archer.x, dy = a.y - archer.y;
+        if (Math.abs(dx) <= 20 && Math.abs(dy) <= 20 && !isDead) {
+          hitSound.play();
+          playerHealth -= 10;
+          if (playerHealth <= 0) {
+          isDead = true;
+          lastDeathTime = Date.now();
+            playerHealth = 0;
+            setTimeout(() => {
+              playerHealth = 250;
+              playerStamina = 200;
+              score = 0;
+              isDead = false;
+              arrows = [];
+              enemyArrows = [];
+              enemies = [];
+              enemyPlatforms = [];
+              spawnEnemy();
+            }, 8000);
+          }
+          return false;
+        }
+        return true;
+      });
+    }
+
+
+
+
+    function drawUI() {
+      if (criticalHitMessage && Date.now() - criticalHitMessage.time < 1000) {
+        ctx.save();
+        const progress = (Date.now() - criticalHitMessage.time) / 1000;
+        const alpha = 1 - progress;
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = 'yellow';
+        ctx.font = 'bold 40px Arial';
+        ctx.fillText('CRITICAL HIT!', criticalHitMessage.x, criticalHitMessage.y);
+        ctx.restore();
+      } else {
+        criticalHitMessage = null;
+      }
+
+
+
+
+      ctx.fillStyle = 'red';
+      ctx.fillRect(10, 10, playerHealth * 0.8, 20);
+      ctx.strokeStyle = 'black';
+      ctx.strokeRect(10, 10, 200, 20);
+
+
+
+
+      ctx.fillStyle = 'blue';
+      ctx.fillRect(10, 40, playerStamina, 15);
+      ctx.strokeRect(10, 40, 200, 15);
+
+
+
+
+      ctx.fillStyle = 'black';
+      ctx.font = '20px Arial';
+      ctx.fillText(`Score: ${score}`, 10, 80);
+      if (playerStamina <= 60 && !isDead) {
+        ctx.fillStyle = 'blue';
+        ctx.font = '24px Arial';
+        ctx.fillText('STAMINA IS LOW', 10, 110);
+      }
+
+
+
+
+      if (isDead) {
+        ctx.fillStyle = 'red';
+        ctx.font = '50px Arial';
+        const timeSinceDeath = Date.now() - lastDeathTime;
+        const fadeDuration = 500;
+        const displayDuration = 1500;
+        const totalDuration = fadeDuration * 2 + displayDuration;
+        let alpha = 1;
+        if (timeSinceDeath < fadeDuration) {
+          alpha = timeSinceDeath / fadeDuration;
+        } else if (timeSinceDeath > fadeDuration + displayDuration) {
+          alpha = 1 - ((timeSinceDeath - fadeDuration - displayDuration) / fadeDuration);
+        }
+        ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
+        ctx.fillText("You Died", canvas.width / 2 - 100, canvas.height / 2);
+        ctx.globalAlpha = 1;
+      }
+    }
+  };
+</script>
+</body>
+</html>

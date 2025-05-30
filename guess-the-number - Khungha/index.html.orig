@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Guess the Number Game</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      color: #fff;
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      text-align: center;
+      user-select: none;
+    }
+    .container {
+      background: rgba(255,255,255,0.1);
+      padding: 30px;
+      border-radius: 16px;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.3);
+      max-width: 350px;
+      width: 100%;
+    }
+    h1 { margin-bottom: 12px; }
+    input[type=number] {
+      width: 100%;
+      padding: 12px;
+      font-size: 1.2rem;
+      border-radius: 8px;
+      border: none;
+      margin-bottom: 20px;
+    }
+    button {
+      width: 100%;
+      background: linear-gradient(135deg, #43cea2, #185a9d);
+      color: white;
+      padding: 14px;
+      font-size: 1.2rem;
+      border-radius: 10px;
+      border: none;
+      cursor: pointer;
+    }
+    #message {
+      margin-top: 20px;
+      font-size: 1.3rem;
+      font-weight: bold;
+    }
+    .correct { color: #00ff94; }
+    .incorrect { color: #ff4f4f; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Guess the Number Game</h1>
+    <p>Guess a number between 1 and 10:</p>
+    <input type="number" id="guessInput" min="1" max="10" placeholder="Enter guess" />
+    <button id="guessBtn">Guess</button>
+    <p id="message"></p>
+  </div>
+
+  <audio id="correctSound" src="sounds/correct.mp3"></audio>
+  <audio id="incorrectSound"></audio> <!-- No incorrect sound included -->
+
+  <script>
+    let secretNumber = Math.floor(Math.random() * 10) + 1;
+    const guessInput = document.getElementById('guessInput');
+    const guessBtn = document.getElementById('guessBtn');
+    const message = document.getElementById('message');
+    const correctSound = document.getElementById('correctSound');
+
+    function playSound(audio) {
+      audio.currentTime = 0;
+      audio.play().catch(e => console.log('Error:', e));
+    }
+
+    function resetGame() {
+      secretNumber = Math.floor(Math.random() * 10) + 1;
+      message.textContent = '';
+      guessInput.disabled = false;
+      guessBtn.disabled = false;
+    }
+
+    guessBtn.addEventListener('click', () => {
+      const guess = Number(guessInput.value);
+      if (!guess || guess < 1 || guess > 10) {
+        message.textContent = "Please enter a number between 1 and 10.";
+        message.className = "incorrect";
+        return;
+      }
+
+      if (guess === secretNumber) {
+        message.textContent = "✅ Correct!";
+        message.className = "correct";
+        playSound(correctSound);
+        guessInput.disabled = true;
+        guessBtn.disabled = true;
+        setTimeout(() => {
+          resetGame();
+          message.textContent = "New number! Try again!";
+          message.className = "";
+        }, 3000);
+      } else {
+        message.textContent = guess > secretNumber ? "❌ Too high!" : "❌ Too low!";
+        message.className = "incorrect";
+      }
+
+      guessInput.value = '';
+      guessInput.focus();
+    });
+
+    window.onload = () => guessInput.focus();
+  </script>
+</body>
+</html>

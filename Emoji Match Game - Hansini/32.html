@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Emoji Match Game</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: "Comic Sans MS", cursive, sans-serif;
+      background: linear-gradient(to bottom, #ffd6e7, #ff99c8, #ff66a3);
+      color: black;
+      text-align: center;
+      overflow: hidden;
+    }
+    h1, h2 {
+      margin: 10px;
+    }
+    .level-buttons {
+      margin: 20px;
+    }
+    .level-button {
+      padding: 10px 20px;
+      margin: 10px;
+      font-size: 18px;
+      border: none;
+      cursor: pointer;
+      background-color: #fff;
+      border-radius: 8px;
+    }
+    .locked {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+    #game-area {
+      position: relative;
+      height: 400px;
+      overflow: hidden;
+    }
+    .emoji {
+      position: absolute;
+      font-size: 2rem;
+      user-select: none;
+    }
+    .card {
+      width: 80px;
+      height: 80px;
+      background-color: white;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: absolute;
+      font-size: 2rem;
+      transition: background 0.3s;
+      cursor: pointer;
+    }
+    .card.flipped {
+      background-color: #ffe6f0;
+    }
+    #selected, #score, #timer {
+      margin: 10px;
+    }
+    .starburst {
+      animation: burst 0.6s ease-out forwards;
+    }
+    @keyframes burst {
+      0% {
+        transform: scale(1);
+        opacity: 1;
+      }
+      100% {
+        transform: scale(2);
+        opacity: 0;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <h1>🍭 Emoji Match Game</h1>
+
+  <div class="level-buttons">
+    <button id="level1Btn" class="level-button">Level 1: Fruits</button>
+    <button id="level2Btn" class="level-button locked" disabled>Level 2: Animals</button>
+  </div>
+
+  <h2 id="selected">Selected: 🍓</h2>
+  <h3 id="score">Score: 0</h3>
+  <h3 id="timer">Time: 30</h3>
+
+  <div id="game-area"></div>
+
+  <script>
+    const fruitEmojis = ["🍎", "🍌", "🍓", "🍇", "🍉", "🍒", "🍍"];
+    const animalEmojis = ["🐶", "🐱", "🦁", "🐯", "🐵", "🐨", "🦥", "🐻", "🦊"];
+    let selected = "";
+    let score = 0;
+    let timer;
+    let timeLeft = 30;
+    let level = 1;
+    let interval;
+
+    const gameArea = document.getElementById("game-area");
+    const selectedDisplay = document.getElementById("selected");
+    const scoreDisplay = document.getElementById("score");
+    const timerDisplay = document.getElementById("timer");
+    const level2Btn = document.getElementById("level2Btn");
+
+    document.getElementById("level1Btn").onclick = () => startLevel(1);
+    level2Btn.onclick = () => {
+      if (!level2Btn.classList.contains("locked")) startLevel(2);
+    };
+
+    function startLevel(lv) {
+      clearInterval(interval);
+      gameArea.innerHTML = "";
+      score = 0;
+      level = lv;
+      scoreDisplay.textContent = "Score: 0";
+      timeLeft = 30;
+      timerDisplay.textContent = "Time: 30";
+
+      if (level === 1) {
+        selected = fruitEmojis[Math.floor(Math.random() * fruitEmojis.length)];
+        selectedDisplay.textContent = "Selected: " + selected;
+        interval = setInterval(dropFruit, 1000);
+      } else if (level === 2) {
+        selected = animalEmojis[Math.floor(Math.random() * animalEmojis.length)];
+        selectedDisplay.textContent = "Selected: " + selected;
+        interval = setInterval(dropCard, 1000);
+      }
+
+      timer = setInterval(() => {
+        timeLeft--;
+        timerDisplay.textContent = "Time: " + timeLeft;
+        if (timeLeft === 0) {
+          clearInterval(timer);
+          clearInterval(interval);
+          if (level === 1 && score >= 4) unlockLevel2();
+        }
+      }, 1000);
+    }
+
+    function dropFruit() {
+      const emoji = document.createElement("div");
+      emoji.className = "emoji";
+      emoji.textContent = fruitEmojis[Math.floor(Math.random() * fruitEmojis.length)];
+      emoji.style.left = Math.random() * (window.innerWidth - 30) + "px";
+      emoji.style.top = "0px";
+      gameArea.appendChild(emoji);
+
+      const fallInterval = setInterval(() => {
+        const currentTop = parseInt(emoji.style.top);
+        emoji.style.top = currentTop + 5 + "px";
+        if (currentTop > 400) {
+          clearInterval(fallInterval);
+          emoji.remove();
+        }
+      }, 30);
+
+      emoji.onclick = () => {
+        if (emoji.textContent === selected) {
+          score++;
+          scoreDisplay.textContent = "Score: " + score;
+          emoji.remove();
+        }
+      };
+    }
+
+    function dropCard() {
+      const card = document.createElement("div");
+      card.className = "card";
+      card.style.left = Math.random() * (window.innerWidth - 100) + "px";
+      card.style.top = "0px";
+
+      const emoji = animalEmojis[Math.floor(Math.random() * animalEmojis.length)];
+      card.dataset.emoji = emoji;
+      card.textContent = "?";
+
+      gameArea.appendChild(card);
+
+      const fallInterval = setInterval(() => {
+        const currentTop = parseInt(card.style.top);
+        card.style.top = currentTop + 5 + "px";
+        if (currentTop > 400) {
+          clearInterval(fallInterval);
+          card.remove();
+        }
+      }, 30);
+
+      card.onclick = () => {
+        card.classList.add("flipped");
+        card.textContent = card.dataset.emoji;
+        if (card.dataset.emoji === selected) {
+          score++;
+          scoreDisplay.textContent = "Score: " + score;
+          card.remove();
+        }
+      };
+    }
+
+    function unlockLevel2() {
+      level2Btn.classList.remove("locked");
+      level2Btn.disabled = false;
+
+      const burst = document.createElement("div");
+      burst.className = "starburst";
+      burst.style.position = "absolute";
+      burst.style.top = level2Btn.offsetTop + "px";
+      burst.style.left = level2Btn.offsetLeft + "px";
+      burst.style.width = "100px";
+      burst.style.height = "100px";
+      burst.style.background = "radial-gradient(circle, #fff, transparent)";
+      burst.style.borderRadius = "50%";
+      burst.style.zIndex = "10";
+      document.body.appendChild(burst);
+
+      setTimeout(() => burst.remove(), 600);
+    }
+  </script>
+</body>
+</html>

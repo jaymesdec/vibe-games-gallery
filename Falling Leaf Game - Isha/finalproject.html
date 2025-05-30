@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Falling Leaf Game with Sound</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+  body {
+    margin: 0;
+    overflow: hidden;
+    font-family: 'Press Start 2P', cursive;
+    background-color: black;
+  }
+  #hud {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    z-index: 10;
+  }
+  #scoreDisplay {
+    font-size: 12px;
+    color: #fff600;
+  }
+  button {
+    padding: 6px 10px;
+    font-size: 10px;
+    font-family: 'Press Start 2P', cursive;
+    background-color: #222;
+    color: #fff600;
+    border: 2px solid #fff600;
+    cursor: pointer;
+  }
+  button:hover {
+    background-color: #444;
+  }
+  canvas {
+    display: block;
+    image-rendering: pixelated;
+  }
+  #startMessage {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.9);
+    color: #fff600;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    font-size: 16px;
+    z-index: 100;
+    padding: 20px;
+    box-sizing: border-box;
+  }
+</style>
+</head>
+<body>
+<div id="hud">
+  <div id="scoreDisplay">Score: 0 | Level: 1</div>
+  <button id="pauseButton">Pause</button>
+  <button id="restartButton">Restart</button>
+</div>
+
+<audio id="catchSound" src="350841__elmasmalo1__level-up-sound-fx.wav"></audio>
+
+<div id="startMessage">
+  Hello! Welcome to Isha's falling leaf game.<br>
+  Please use the arrow keys to move the player around the screen.<br>
+  Your goal is to catch the leaves. Be quick!
+</div>
+
+<canvas id="gameCanvas"></canvas>
+
+<script>
+  const canvas = document.getElementById("gameCanvas");
+  const ctx = canvas.getContext("2d");
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  ctx.imageSmoothingEnabled = false;
+
+  const scoreDisplay = document.getElementById("scoreDisplay");
+  const pauseButton = document.getElementById("pauseButton");
+  const restartButton = document.getElementById("restartButton");
+  const startMessage = document.getElementById("startMessage");
+  const catchSound = document.getElementById("catchSound");
+
+  const player = {
+    x: canvas.width / 2,
+    y: canvas.height - 100,
+    width: 10,
+    height: 40,
+    speed: 5
+  };
+
+  let score = 0;
+  let level = 1;
+  let leaves = [];
+  let totalLeaves = 60;
+  let leavesFallen = 0;
+  let keys = {};
+  let paused = false;
+  let gameOver = false;
+  let alternateSide = true;
+  let forestTrees = [];
+
+  const clouds = [
+    { x: canvas.width * 0.2, y: 80 },
+    { x: canvas.width * 0.5, y: 60 },
+    { x: canvas.width * 0.8, y: 90 }
+  ];
+
+  document.addEventListener("keydown", e => keys[e.key] = true);
+  document.addEventListener("keyup", e => keys[e.key] = false);
+
+  pauseButton.addEventListener("click", () => {
+    paused = !paused;
+    pauseButton.textContent = paused ? "Resume" : "Pause";
+    if (!paused) {
+      requestAnimationFrame(gameLoop);
+    }
+  });
+
+  restartButton.addEventListener("click", restartGame);
+
+  function restartGame() {
+    score = 0;
+    level = 1;
+    leaves = [];
+    leavesFallen = 0;
+    paused = false;
+    gameOver = false;
+    player.x = canvas.width / 2;
+    player.y = canvas.height - 100;
+    player.speed = 5;
+    forestTrees = [];
+    pauseButton.textContent = "Pause";
+    updateScoreDisplay();
+    requestAnimationFrame(gameLoop);
+  }
+
+  function updateScoreDisplay() {
+    scoreDisplay.textContent = "Score: " + score + " | Level: " + level;
+  }
+
+  function drawBackground() {
+    const skyHeight = canvas.height * 0.6;
+    ctx.fillStyle = "#5c94fc";
+    ctx.fillRect(0, 0, canvas.width, skyHeight);
+
+    ctx.fillStyle = "#ffffff";
+    clouds.forEach(cloud => {
+      cloud.y += 0.05;
+      ctx.fillRect(cloud.x, cloud.y, 100, 30);
+      ctx.fillRect(cloud.x + 20, cloud.y - 15, 60, 30);
+      cloud.x -= 0.2;
+      if (cloud.x < -120) cloud.x = canvas.width;
+      if (cloud.y > skyHeight + 50) cloud.y = -50;
+    });
+
+    const sandHeight = canvas.height * 0.4;
+    ctx.fillStyle = "#d1b38c";
+    ctx.fillRect(0, skyHeight, canvas.width, sandHeight);
+
+    ctx.fillStyle = "#c9a97c";
+    for (let i = 0; i < 200; i++) {
+      let dotX = Math.random() * canvas.width;
+      let dotY = skyHeight + Math.random() * sandHeight;
+      ctx.fillRect(dotX, dotY, 2, 2);
+    }
+  }
+
+  function drawPlayer() {
+    ctx.fillStyle = "#ff007f";
+    ctx.fillRect(player.x, player.y - player.height, player.width, player.height);
+    ctx.beginPath();
+    ctx.arc(player.x + player.width / 2, player.y - player.height - 10, 8, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  function drawTree(x, y, size) {
+    ctx.fillStyle = "#442200";
+    ctx.fillRect(x + size / 2 - 10, y + 60, 20, 150);
+    ctx.fillStyle = "#00ff00";
+    ctx.beginPath();
+    ctx.arc(x + size / 2, y + 40, size / 2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  function drawTrees() {
+    const baseY = canvas.height * 0.6 - 200;
+    if (level === 1) {
+      drawTree(canvas.width / 2 - 50, baseY, 100);
+    } else if (level === 2) {
+      drawTree(canvas.width / 2 - 100, baseY, 100);
+      drawTree(canvas.width / 2, baseY, 100);
+    } else if (level === 3) {
+      if (forestTrees.length === 0) {
+        for (let i = 0; i < 10; i++) {
+          forestTrees.push({
+            x: Math.random() * (canvas.width - 100),
+            y: baseY + Math.random() * 30,
+            size: 80 + Math.random() * 40
+          });
+        }
+      }
+      forestTrees.forEach(tree => drawTree(tree.x, tree.y, tree.size));
+    }
+  }
+
+  function drawLeaves() {
+    ctx.fillStyle = "red";
+    leaves.forEach(leaf => {
+      let scale = level === 3 ? 1 + (leaf.y / canvas.height) : 1;
+      ctx.beginPath();
+      ctx.moveTo(leaf.x, leaf.y);
+      ctx.lineTo(leaf.x + 6 * scale, leaf.y + 12 * scale);
+      ctx.lineTo(leaf.x, leaf.y + 8 * scale);
+      ctx.lineTo(leaf.x - 6 * scale, leaf.y + 12 * scale);
+      ctx.closePath();
+      ctx.fill();
+    });
+  }
+
+  function updateLeaves() {
+    for (let i = leaves.length - 1; i >= 0; i--) {
+      let leaf = leaves[i];
+      leaf.y += leaf.speed;
+      let size = level === 3 ? 12 * (1 + (leaf.y / canvas.height)) : 12;
+
+      if (
+        leaf.y + size > player.y - player.height &&
+        leaf.y < player.y &&
+        leaf.x + 6 > player.x &&
+        leaf.x - 6 < player.x + player.width
+      ) {
+        leaves.splice(i, 1);
+        score++;
+        catchSound.currentTime = 0;
+        catchSound.play();
+        leavesFallen++;
+        if (score === 12 && level === 1) {
+          level = 2;
+          leaves = [];
+          leavesFallen = 0;
+          totalLeaves = 40;
+        } else if (score === 25 && level === 2) {
+          level = 3;
+          player.speed = 8;
+          leaves = [];
+          leavesFallen = 0;
+          totalLeaves = 50;
+        }
+        updateScoreDisplay();
+      } else if (leaf.y > canvas.height) {
+        leaves.splice(i, 1);
+        leavesFallen++;
+        if (level < 3) {
+          score--;
+          updateScoreDisplay();
+        } else {
+          alert("You missed a leaf! Restarting...");
+          restartGame();
+        }
+      }
+    }
+  }
+
+  function dropLeaf() {
+    if (!paused && !gameOver && leavesFallen < totalLeaves) {
+      const dropY = canvas.height * 0.6 - 180;
+      if (level === 1) {
+        leaves.push({
+          x: canvas.width / 2 + Math.random() * 80 - 40,
+          y: dropY,
+          speed: 2 + Math.random() * 2
+        });
+      } else if (level === 2) {
+        let offset = alternateSide ? -100 : 100;
+        leaves.push({
+          x: canvas.width / 2 + offset + Math.random() * 40 - 20,
+          y: dropY,
+          speed: 2 + Math.random() * 2
+        });
+        alternateSide = !alternateSide;
+      } else if (level === 3) {
+        leaves.push({
+          x: Math.random() * canvas.width,
+          y: dropY,
+          speed: 2 + Math.random() * 3
+        });
+      }
+    }
+  }
+
+  function movePlayer() {
+    if (keys["ArrowLeft"] && player.x > 0) player.x -= player.speed;
+    if (keys["ArrowRight"] && player.x + player.width < canvas.width) player.x += player.speed;
+    if (keys["ArrowUp"] && player.y - player.height - 10 > 0) player.y -= player.speed;
+    if (keys["ArrowDown"] && player.y < canvas.height - 20) player.y += player.speed;
+  }
+
+  function gameLoop() {
+    if (paused || gameOver) {
+      requestAnimationFrame(gameLoop);
+      return;
+    }
+    drawBackground();
+    movePlayer();
+    updateLeaves();
+    drawTrees();
+    drawPlayer();
+    drawLeaves();
+    requestAnimationFrame(gameLoop);
+  }
+
+  setTimeout(() => {
+    startMessage.style.display = "none";
+    setInterval(dropLeaf, 2000);
+    requestAnimationFrame(gameLoop);
+  }, 8000);
+</script>
+</body>
+</html>
