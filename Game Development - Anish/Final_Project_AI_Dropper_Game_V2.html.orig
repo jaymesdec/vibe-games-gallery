@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>A Platform Dodger Game</title>
+  <style>
+    body { margin:0; overflow:hidden; font-family:sans-serif; background:#87CEEB; }
+    canvas { display:block; margin:0 auto; background:#87CEEB; }
+    .panel {
+      position:absolute; top:0; left:0; width:100%; height:100%;
+      background:rgba(0,0,0,0.75); color:#fff; display:flex;
+      flex-direction:column; align-items:center; justify-content:center;
+      text-align:center; padding:20px; box-sizing:border-box;
+    }
+    .panel button {
+      margin:8px; padding:12px 24px; font-size:18px;
+      border:none; border-radius:6px; cursor:pointer;
+      background:#27ae60; color:#fff;
+    }
+    #shopItems { display:flex; flex-wrap:wrap; justify-content:center; }
+    .shopItem {
+      background:#fff; color:#000; width:100px; margin:10px;
+      padding:8px; border-radius:6px; text-align:center;
+    }
+    .shopItem button {
+      display:block; margin:8px auto 0; padding:4px 8px;
+      font-size:12px; cursor:pointer;
+    }
+    #nextLevelBtn, #shopGameBtn {
+      position:absolute; padding:10px 20px; font-size:16px;
+      border:none; border-radius:6px; cursor:pointer;
+      box-shadow:0 2px 4px rgba(0,0,0,0.3); display:none;
+    }
+    #nextLevelBtn {
+      left:50%; top:50%; transform:translate(-50%,-50%);
+      background:#f1c40f; color:#fff;
+    }
+    #shopGameBtn {
+      top:10px; right:10px; background:#3498DB; color:#fff;
+    }
+    #hud { position:absolute; top:10px; left:10px; color:#fff; font:18px sans-serif; }
+    #powerups {
+      position:absolute; bottom:10px; left:50%; transform:translateX(-50%);
+      display:flex; gap:10px;
+    }
+    #powerups button {
+      padding:6px 12px; font-size:14px; border:none; border-radius:4px;
+      cursor:pointer;
+    }
+  </style>
+</head>
+<body>
+  <div id="introPanel" class="panel">
+    <h1>A Platform Dodger Game</h1>
+    <button id="playBtn">Play</button>
+    <button id="instructionsBtn">Instructions</button>
+    <button id="shopBtn">Shop</button>
+  </div>
+
+  <div id="instructionsPanel" class="panel" style="display:none;">
+    <h2>How to Play</h2>
+    <p>
+      To play this dropper game, use the left and right arrow keys to move,<br>
+      and avoid the obstacles to finish each level.<br>
+      Collect the coins from each level to buy new skins,<br>
+      and reach level 5 to start unlocking power-ups that make the game easier.
+    </p>
+    <button id="instrBackBtn">Back</button>
+  </div>
+
+  <div id="shopPanel" class="panel" style="display:none;">
+    <h1>Shop</h1>
+    <p>Coins: <span id="shopCoinCount">0</span></p>
+    <div id="shopItems"></div>
+    <button id="shopBackBtn">Back</button>
+    <button id="shopPlayBtn">Play</button>
+  </div>
+
+  <canvas id="game"></canvas>
+  <div id="hud">
+    Level: <span id="hudLevel">1</span> &nbsp;
+    Coins: <span id="hudCoins">0</span>
+  </div>
+  <div id="powerups">
+    <button id="slowBtn" disabled>Slowness (1)</button>
+    <button id="invincBtn" disabled>Invincibility (2)</button>
+    <button id="teleportBtn" disabled>Time Dilation (3)</button>
+  </div>
+  <button id="nextLevelBtn">Start Level 2</button>
+  <button id="shopGameBtn">Shop</button>
+
+  <script>
+    const canvas = document.getElementById('game'),
+          ctx    = canvas.getContext('2d');
+    const WIDTH = 400, HEIGHT = 600;
+    canvas.width = WIDTH; canvas.height = HEIGHT;
+
+    const LEVEL_DURATION = 20000;
+    const bgColors = ['green','gray','blue','purple','orange'];
+
+    // UI refs
+    const intro       = document.getElementById('introPanel'),
+          instr       = document.getElementById('instructionsPanel'),
+          shop        = document.getElementById('shopPanel'),
+          play        = document.getElementById('playBtn'),
+          instrBtn    = document.getElementById('instructionsBtn'),
+          instrBack   = document.getElementById('instrBackBtn'),
+          shopBtn     = document.getElementById('shopBtn'),
+          shopBack    = document.getElementById('shopBackBtn'),
+          shopPlay    = document.getElementById('shopPlayBtn'),
+          nextBtn     = document.getElementById('nextLevelBtn'),
+          shopGameBtn = document.getElementById('shopGameBtn'),
+          shopCoinCt  = document.getElementById('shopCoinCount'),
+          shopItems   = document.getElementById('shopItems'),
+          hudLvl      = document.getElementById('hudLevel'),
+          hudCoins    = document.getElementById('hudCoins'),
+          slowBtn     = document.getElementById('slowBtn'),
+          invincBtn   = document.getElementById('invincBtn'),
+          teleportBtn = document.getElementById('teleportBtn');
+
+    // Game state
+    let level = 1,
+        startTime = 0,
+        scroll = 0,
+        platforms = [], lastPlat = 0, nextPlat = 200,
+        coinsArr = [], lastCoin = 0, nextCoin = 300,
+        slowActive = false, invincible = false,
+        slowTimeoutId = null,
+        gameRunning = false, confetti = [];
+
+    const block = { x:WIDTH/2-15, y:HEIGHT/2-15, w:30, h:30, vx:0, speed:2 };
+
+    // Persistence
+    let totalCoins = parseInt(localStorage.getItem('totalCoins')) || 0;
+    let purchased  = JSON.parse(localStorage.getItem('purchasedSkins')) || ['red'];
+    let equipped   = localStorage.getItem('equippedSkin') || 'red';
+    function saveState(){
+      localStorage.setItem('totalCoins', totalCoins);
+      localStorage.setItem('purchasedSkins', JSON.stringify(purchased));
+      localStorage.setItem('equippedSkin', equipped);
+    }
+
+    const skins = [
+      {id:'red',    color:'#E74C3C', cost:0},
+      {id:'orange', color:'#E67E22', cost:25},
+      {id:'purple', color:'#9B59B6', cost:50},
+      {id:'green',  color:'#2ECC71', cost:60},
+      {id:'blue',   color:'#3498DB', cost:80},
+      {id:'gray',   color:'#7F8C8D', cost:100},
+      {id:'rainbow',color:'rainbow', cost:1000}
+    ];
+
+    // Audio rotation
+    const sounds = [
+      new Audio('sounds/Game1.mp3'),
+      new Audio('sounds/Game4.mp3'),
+      new Audio('sounds/Game2.mp3'),
+      new Audio('sounds/Game3.mp3'),
+      new Audio('sounds/Game5.mp3')
+    ];
+    let playlist = [], idx = 0, audioActive = false;
+    function shuffle(a){
+      for(let i=a.length-1;i>0;i--){
+        let j = Math.floor(Math.random()*(i+1));
+        [a[i],a[j]]=[a[j],a[i]];
+      }
+      return a;
+    }
+    function startAudio(){
+      playlist = shuffle([...sounds]); idx = 0; audioActive = true; nextAudio();
+    }
+    function nextAudio(){
+      if(!audioActive) return;
+      sounds.forEach(s=>{ s.pause(); s.currentTime=0; s.onended=null; });
+      let s = playlist[idx];
+      s.play();
+      s.onended = ()=>{ idx = (idx+1)%playlist.length; nextAudio(); };
+    }
+    function stopAudio(){
+      audioActive = false;
+      sounds.forEach(s=>{ s.pause(); s.currentTime = 0; s.onended = null; });
+    }
+
+    // Shop
+    function renderShop(){
+      shopCoinCt.textContent = totalCoins;
+      shopItems.innerHTML = '';
+      skins.forEach(skin=>{
+        const div = document.createElement('div');
+        div.className = 'shopItem';
+        div.innerHTML = `
+          <div style="
+            width:50px;height:50px;margin:0 auto 8px;
+            background:${skin.id==='rainbow'
+              ? 'linear-gradient(45deg,red,orange,yellow,green,blue,purple)'
+              : skin.color};
+            border:2px solid #333;
+          "></div>
+          <strong>${skin.id}</strong><br>Cost: ${skin.cost}
+          <button data-id="${skin.id}"></button>
+        `;
+        const btn = div.querySelector('button');
+        if(purchased.includes(skin.id)){
+          if(equipped===skin.id){
+            btn.textContent='Equipped'; btn.disabled=true;
+          } else {
+            btn.textContent='Equip';
+            btn.onclick = ()=>{
+              equipped = skin.id;
+              saveState();
+              renderShop();
+            };
+          }
+        } else {
+          btn.textContent='Buy';
+          btn.disabled = totalCoins < skin.cost;
+          btn.onclick = ()=>{
+            if(totalCoins >= skin.cost){
+              totalCoins -= skin.cost;
+              purchased.push(skin.id);
+              equipped = skin.id;
+              saveState();
+              renderShop();
+              updateHUD();
+            }
+          };
+        }
+        shopItems.appendChild(div);
+      });
+    }
+
+    // Helpers
+    function show(el){ el.style.display = 'flex'; }
+    function hide(el){ el.style.display = 'none'; }
+    function rnd(min,max){ return Math.random()*(max-min)+min; }
+
+    // UI events
+    play.onclick       = startGame;
+    instrBtn.onclick   = ()=>{ hide(intro); show(instr); };
+    instrBack.onclick  = ()=>{ hide(instr); show(intro); };
+    shopBtn.onclick    = ()=>{ hide(intro); show(shop); renderShop(); };
+    shopBack.onclick   = ()=>{ hide(shop); show(intro); };
+    shopPlay.onclick   = startGame;
+    shopGameBtn.onclick= ()=>{ show(shop); hide(nextBtn); hide(shopGameBtn); renderShop(); };
+    nextBtn.onclick    = ()=>{ level++; startGame(); };
+
+    // Keybinds
+    window.addEventListener('keydown',e=>{
+      if(e.key==='ArrowLeft')  block.vx = -block.speed;
+      if(e.key==='ArrowRight') block.vx =  block.speed;
+      if(e.key==='1' && !slowBtn.disabled)      slowBtn.click();
+      if(e.key==='2' && !invincBtn.disabled)    invincBtn.click();
+      if(e.key==='3' && !teleportBtn.disabled)  teleportBtn.click();
+    });
+    window.addEventListener('keyup',e=>{
+      if((e.key==='ArrowLeft'&&block.vx<0)||(e.key==='ArrowRight'&&block.vx>0))
+        block.vx = 0;
+    });
+
+    // Power-ups: once per attempt
+    slowBtn.onclick = ()=>{
+      if(!slowActive){
+        slowActive = true;
+        block.speed *= 0.5;
+        slowBtn.disabled = true;
+        clearTimeout(slowTimeoutId);
+        slowTimeoutId = setTimeout(()=>{
+          block.speed *= 2;
+          slowActive = false;
+        }, 10000);
+      }
+    };
+    invincBtn.onclick = ()=>{
+      invincible = true;
+      invincBtn.disabled = true;
+      setTimeout(()=> invincible = false, 5000);
+    };
+    teleportBtn.onclick = ()=>{
+      startTime -= 5000;
+      teleportBtn.disabled = true;
+    };
+
+    function updateHUD(){
+      hudLvl.textContent = level;
+      hudCoins.textContent= totalCoins;
+    }
+
+    function deployConfetti(){
+      confetti=[];
+      for(let i=0;i<100;i++){
+        confetti.push({ x:rnd(0,WIDTH), y:rnd(-HEIGHT,0), vx:rnd(-2,2), vy:rnd(2,6), c:`hsl(${rnd(0,360)},100%,50%)` });
+      }
+      setTimeout(()=>{ confetti=[]; celebrating=false; },2000);
+    }
+
+    let celebrating=false;
+    function resetLevel(){
+      clearTimeout(slowTimeoutId);
+      slowActive = false;
+
+      const bg = bgColors[(level-1)%bgColors.length];
+      document.body.style.background = bg;
+      canvas.style.background        = bg;
+
+      scroll     = 0;
+      startTime  = Date.now();
+      block.x    = WIDTH/2 - block.w/2;
+      block.vx   = 0;
+      block.speed= 2 + (level-1)*0.5;
+
+      platforms  = []; lastPlat = 0; nextPlat = rnd(150,300);
+      coinsArr   = []; lastCoin = 0; nextCoin = rnd(200,400);
+
+      slowBtn.disabled     = level < 5;
+      invincBtn.disabled   = level < 10;
+      teleportBtn.disabled = level < 15;
+
+      hide(nextBtn);
+      hide(shopGameBtn);
+      updateHUD();
+    }
+
+    function startGame(){
+      hide(intro);
+      hide(instr);
+      hide(shop);
+      resetLevel();
+      startAudio();
+      gameRunning=true;
+      requestAnimationFrame(loop);
+    }
+
+    function loop(){
+      if(celebrating){
+        ctx.clearRect(0,0,WIDTH,HEIGHT);
+        confetti.forEach(c=>{ c.x+=c.vx; c.y+=c.vy; ctx.fillStyle=c.c; ctx.fillRect(c.x,c.y,4,8); });
+        requestAnimationFrame(loop);
+        return;
+      }
+      if(!gameRunning) return;
+
+      scroll += block.speed;
+      block.x = Math.max(0, Math.min(WIDTH-block.w, block.x + block.vx));
+
+      if(scroll - lastPlat >= nextPlat){
+        const w = rnd(50,150);
+        platforms.push({ x:rnd(0,WIDTH-w), y:scroll+HEIGHT, width:w, height:10 });
+        lastPlat = scroll; nextPlat = rnd(150,300);
+      }
+      if(scroll - lastCoin >= nextCoin){
+        coinsArr.push({ x:rnd(0,WIDTH-20), y:scroll+HEIGHT, size:20 });
+        lastCoin = scroll; nextCoin = rnd(200,400);
+      }
+
+      for(let i=coinsArr.length-1;i>=0;i--){
+        const c=coinsArr[i], sy=c.y-scroll;
+        if(sy<block.y+block.h && sy+c.size>block.y &&
+           block.x+block.w>c.x && block.x<c.x+c.size){
+          totalCoins++; saveState(); updateHUD(); coinsArr.splice(i,1);
+        }
+      }
+
+      for(const p of platforms){
+        const sy=p.y-scroll;
+        if(!invincible &&
+           sy<block.y+block.h && sy+p.height>block.y &&
+           block.x+block.w>p.x && block.x<p.x+p.width){
+          gameRunning=false;
+          setTimeout(()=>{
+            alert(`You hit a platform! Restarting level ${level}.`);
+            startGame();
+          },10);
+          return;
+        }
+      }
+
+      platforms = platforms.filter(p=>p.y-scroll<HEIGHT+p.height);
+      coinsArr   = coinsArr.filter(c=>c.y-scroll<HEIGHT+c.size);
+
+      const elapsed = Date.now() - startTime;
+      if(elapsed >= LEVEL_DURATION){
+        gameRunning=false; stopAudio(); celebrating=true; deployConfetti();
+        nextBtn.textContent = `Start Level ${level+1}`;
+        setTimeout(()=>{ show(nextBtn); show(shopGameBtn); },2000);
+        return;
+      }
+
+      ctx.clearRect(0,0,WIDTH,HEIGHT);
+      confetti.forEach(c=>{ c.x+=c.vx; c.y+=c.vy; ctx.fillStyle=c.c; ctx.fillRect(c.x,c.y,4,8); });
+
+      ctx.fillStyle = skins.find(s=>s.id===equipped).color;
+      ctx.fillRect(block.x, block.y, block.w, block.h);
+
+      ctx.fillStyle = '#2C3E50';
+      platforms.forEach(p=>{
+        const sy = p.y-scroll;
+        if(sy>-p.height&&sy<HEIGHT) ctx.fillRect(p.x,sy,p.width,p.height);
+      });
+
+      ctx.fillStyle = '#FFD700';
+      coinsArr.forEach(c=>{
+        const sy=c.y-scroll;
+        if(sy>-c.size&&sy<HEIGHT){
+          ctx.beginPath();
+          ctx.arc(c.x+c.size/2,sy+c.size/2,c.size/2,0,Math.PI*2);
+          ctx.fill();
+        }
+      });
+
+      const pct=Math.min((Date.now()-startTime)/LEVEL_DURATION,1);
+      ctx.fillStyle='rgba(255,255,255,0.3)'; ctx.fillRect(10,50,WIDTH-20,8);
+      ctx.fillStyle='lime'; ctx.fillRect(10,50,(WIDTH-20)*pct,8);
+      ctx.strokeStyle='#fff'; ctx.strokeRect(10,50,WIDTH-20,8);
+      ctx.fillStyle='#fff'; ctx.font='14px sans-serif';
+      const e=(elapsed/1000).toFixed(1), t=(LEVEL_DURATION/1000).toFixed(1), r=((LEVEL_DURATION-elapsed)/1000).toFixed(1);
+      ctx.fillText(`${e}s`,10,45); ctx.fillText(`${t}s`,WIDTH/2-15,45); ctx.fillText(`${r}s`,WIDTH-40,45);
+
+      requestAnimationFrame(loop);
+    }
+
+    updateHUD();
+
+    //The chats that were used are listed below://
+    //https://chatgpt.com/share/6838e22d-7b2c-8010-a913-46e360504a89//
+    //https://chatgpt.com/share/6838e278-b6e4-8010-a3f4-15819a65ac8c//
+  </script>
+</body>
+</html>
