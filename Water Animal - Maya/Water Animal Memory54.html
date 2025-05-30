@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Water Animal Memory Game</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      background: lightblue;
+      margin: 0;
+      padding: 20px;
+    }
+    .animal-container {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 10px;
+      max-width: 400px;
+      margin: 20px auto;
+    }
+    .animal {
+      width: 60px;
+      height: 60px;
+      border: 2px solid #000;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: white;
+      cursor: pointer;
+    }
+    .animal img {
+      max-width: 100%;
+      max-height: 100%;
+    }
+    #timerDisplay, #message, #scoreDisplay {
+      margin: 10px;
+      font-weight: bold;
+    }
+    #overview {
+      max-width: 600px;
+      margin: 10px auto;
+      background-color: #fff;
+      padding: 15px;
+      border-radius: 10px;
+      text-align: left;
+    }
+    .animal-checkbox {
+      margin: 2px 5px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Water Animal Memory Game</h1>
+  <div id="overview">
+    <h3>Mode Overview:</h3>
+    <ul>
+      <li><strong>Sequence:</strong> Listen to a sequence of animal sounds and repeat it in order.</li>
+      <li><strong>Matching:</strong> Find pairs of matching animals from hidden cards.</li>
+      <li><strong>Sound:</strong> Hear an animal sound and click the correct image.</li>
+      <li><strong>Location:</strong> Memorize the position of animals and recall their order.</li>
+    </ul>
+  </div>
+  <div>
+    <label for="mode">Mode:</label>
+    <select id="mode">
+      <option value="sequence">Sequence</option>
+      <option value="matching">Matching</option>
+      <option value="sound">Sound</option>
+      <option value="location">Location</option>
+    </select>
+
+    <label for="theme">Theme:</label>
+    <select id="theme" onchange="changeTheme()">
+      <option value="lightblue">Ocean Blue</option>
+      <option value="lightgreen">Seaweed Green</option>
+      <option value="lightcoral">Coral Red</option>
+      <option value="lightgray">Shell Gray</option>
+    </select>
+
+    <label for="useTimer">Use Timer:</label>
+    <input type="checkbox" id="useTimer" checked>
+    <label for="timerAmount">Seconds:</label>
+    <input type="number" id="timerAmount" value="20" min="5" max="120" style="width: 60px;">
+
+    <label for="randomDifficulty">Randomize Difficulty:</label>
+    <input type="checkbox" id="randomDifficulty" checked>
+
+    <div>
+      <strong>Select Animals:</strong><br>
+      <div id="animalOptions"></div>
+    </div>
+
+    <button onclick="startRound()">Start</button>
+    <button onclick="startRound()">Play Again</button>
+  </div>
+
+  <div id="scoreDisplay">Score: 0</div>
+  <div id="timerDisplay"></div>
+  <div id="message"></div>
+  <div class="animal-container" id="animalContainer"></div>
+
+  <script>
+    const container = document.getElementById("animalContainer");
+    const message = document.getElementById("message");
+    const scoreDisplay = document.getElementById("scoreDisplay");
+    const modeSelect = document.getElementById("mode");
+    const timerDisplay = document.getElementById("timerDisplay");
+    const themeSelect = document.getElementById("theme");
+    const useTimerCheckbox = document.getElementById("useTimer");
+    const timerAmountInput = document.getElementById("timerAmount");
+    const animalOptions = document.getElementById("animalOptions");
+    const randomDifficultyCheckbox = document.getElementById("randomDifficulty");
+
+    const animals = [
+      { name: "fish", image: "images/fish.png", sound: "sounds/fish.mp3" },
+      { name: "dolphin", image: "images/dolphin.png", sound: "sounds/dolphin.mp3" },
+      { name: "octopus", image: "images/octopus.jpg", sound: "sounds/octopus.wav" },
+      { name: "turtle", image: "images/turtle.jpg", sound: "sounds/turtle.wav" },
+      { name: "crab", image: "images/crab.jpg", sound: "sounds/crab.wav" },
+      { name: "pufferfish", image: "images/pufferfish.jpg", sound: "sounds/splash.wav" }
+    ];
+
+    let sequence = [], userSequence = [], score = 0, timer;
+
+    function playSound(name) {
+      const a = animals.find(animal => animal.name === name);
+      if (a && a.sound) new Audio(a.sound).play();
+    }
+
+    function updateScore() {
+      scoreDisplay.textContent = `Score: ${score}`;
+    }
+
+    function resetGame() {
+      clearInterval(timer);
+      timerDisplay.textContent = "";
+      container.innerHTML = "";
+      message.textContent = "";
+      sequence = [];
+      userSequence = [];
+    }
+
+    function createAnimalCheckboxes() {
+      animalOptions.innerHTML = "";
+      animals.forEach(animal => {
+        const label = document.createElement("label");
+        label.className = "animal-checkbox";
+        label.innerHTML = `<input type='checkbox' value='${animal.name}' checked> ${animal.name}`;
+        animalOptions.appendChild(label);
+      });
+    }
+
+    function getSelectedAnimals() {
+      const checkboxes = animalOptions.querySelectorAll("input[type='checkbox']");
+      return animals.filter(animal => Array.from(checkboxes).some(cb => cb.checked && cb.value === animal.name));
+    }
+
+    function changeTheme() {
+      document.body.style.background = themeSelect.value;
+    }
+
+    function startTimer(seconds) {
+      timerDisplay.textContent = `Time: ${seconds}`;
+      timer = setInterval(() => {
+        seconds--;
+        timerDisplay.textContent = `Time: ${seconds}`;
+        if (seconds <= 0) {
+          clearInterval(timer);
+          message.textContent = "Time's up! Try again.";
+        }
+      }, 1000);
+    }
+
+    function startRound() {
+      resetGame();
+      const mode = modeSelect.value;
+      let selectedAnimals = getSelectedAnimals();
+
+      if (selectedAnimals.length < 2) {
+        message.textContent = "Please select at least two animals.";
+        return;
+      }
+
+      const count = randomDifficultyCheckbox.checked
+        ? Math.floor(Math.random() * (selectedAnimals.length - 1)) + 2
+        : selectedAnimals.length;
+
+      const shuffled = [...selectedAnimals].sort(() => Math.random() - 0.5);
+      const selected = shuffled.slice(0, count);
+
+      if (useTimerCheckbox.checked) {
+        const time = parseInt(timerAmountInput.value);
+        startTimer(time);
+      }
+
+      if (mode === "sequence") {
+        sequence = selected.map(a => a.name);
+        let i = 0;
+        function playNext() {
+          if (i < sequence.length) {
+            playSound(sequence[i]);
+            i++;
+            setTimeout(playNext, 1000);
+          } else {
+            showAnimals(selected, "sequence");
+          }
+        }
+        playNext();
+      } else if (mode === "matching") {
+        const cards = [...selected, ...selected].sort(() => Math.random() - 0.5);
+        let flipped = [];
+        cards.forEach(animal => {
+          const div = document.createElement("div");
+          div.className = "animal";
+          div.dataset.name = animal.name;
+          div.innerHTML = `<img src="images/question.png" alt="?">`;
+          div.onclick = () => {
+            if (flipped.length < 2 && !div.classList.contains("matched") && !flipped.includes(div)) {
+              div.innerHTML = `<img src="${animal.image}" alt="${animal.name}">`;
+              playSound(animal.name);
+              flipped.push(div);
+              if (flipped.length === 2) {
+                setTimeout(() => {
+                  if (flipped[0].dataset.name === flipped[1].dataset.name) {
+                    flipped.forEach(f => f.classList.add("matched"));
+                    score++;
+                    message.textContent = "Matched!";
+                  } else {
+                    flipped.forEach(f => f.innerHTML = `<img src="images/question.png" alt="?">`);
+                    message.textContent = "Try again.";
+                  }
+                  flipped = [];
+                  updateScore();
+                }, 800);
+              }
+            }
+          };
+          container.appendChild(div);
+        });
+      } else if (mode === "sound") {
+        const answer = selected[0];
+        playSound(answer.name);
+        selected.sort(() => Math.random() - 0.5).forEach(animal => {
+          const div = document.createElement("div");
+          div.className = "animal";
+          div.innerHTML = `<img src="${animal.image}" alt="${animal.name}">`;
+          div.onclick = () => {
+            if (animal.name === answer.name) {
+              score++;
+              message.textContent = "Correct!";
+            } else {
+              message.textContent = "Wrong animal.";
+            }
+            updateScore();
+          };
+          container.appendChild(div);
+        });
+      } else if (mode === "location") {
+        selected.forEach(animal => {
+          const div = document.createElement("div");
+          div.className = "animal";
+          div.innerHTML = `<img src="${animal.image}" alt="${animal.name}">`;
+          container.appendChild(div);
+        });
+        setTimeout(() => {
+          container.innerHTML = "";
+          userSequence = [];
+          selected.forEach(animal => {
+            const div = document.createElement("div");
+            div.className = "animal";
+            div.innerHTML = `<img src="${animal.image}" alt="${animal.name}">`;
+            div.onclick = () => {
+              userSequence.push(animal.name);
+              if (userSequence.length === selected.length) {
+                const correct = userSequence.every((name, i) => name === selected[i].name);
+                if (correct) {
+                  score++;
+                  message.textContent = "Correct sequence!";
+                } else {
+                  message.textContent = "Wrong order.";
+                }
+                updateScore();
+              }
+            };
+            container.appendChild(div);
+          });
+        }, 3000);
+      }
+    }
+
+    window.onload = () => {
+      createAnimalCheckboxes();
+    };
+  </script>
+</body>
+</html>
