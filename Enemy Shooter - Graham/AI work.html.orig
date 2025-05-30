@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+ <meta charset="UTF-8" />
+ <title>Battle game with Waves & Power-ups</title>
+ <style>
+   html, body {
+     margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #222;
+   }
+   canvas {
+     display: block; background-color: #111; width: 100%; height: 100%;
+   }
+ </style>
+</head>
+<body>
+<canvas id="gameCanvas"></canvas>
+<script>
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+
+function resizeCanvas() {
+ canvas.width = window.innerWidth;
+ canvas.height = window.innerHeight;
+ scaleX = canvas.width / mapWidth;
+ scaleY = canvas.height / mapHeight;
+}
+
+let mapWidth = window.innerWidth;
+let mapHeight = window.innerHeight;
+let scaleX = 1;
+let scaleY = 1;
+resizeCanvas();
+window.addEventListener("resize", resizeCanvas);
+
+const player = {
+ x: mapWidth / 2,
+ y: mapHeight / 2,
+ size: 30,
+ color: "white",
+ speed: 7,
+ health: 3
+};
+
+const keys = {};
+document.addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
+document.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
+
+const bullets = [];
+const enemies = [];
+const powerUps = [];
+
+let bulletCooldown = false;
+let mouseX = player.x;
+let mouseY = player.y;
+
+let speedBoostTime = 0;
+let rapidFireTime = 0;
+let forceFieldTime = 0;
+
+let currentWave = 1;
+const waveDuration = 15000;
+let waveTimer = performance.now() + waveDuration;
+
+let showInstructions = true;
+
+document.addEventListener("keydown", function(e) {
+ if (showInstructions && e.code === "Enter") {
+   showInstructions = false;
+   spawnEnemiesForWave();
+ }
+
+ if (!showInstructions && e.code === "Space" && !bulletCooldown) {
+   bulletCooldown = true;
+   setTimeout(() => bulletCooldown = false, 1000);
+
+   const dx = mouseX - player.x;
+   const dy = mouseY - player.y;
+   const baseAngle = Math.atan2(dy, dx);
+   const speed = 5;
+   const spread = Math.PI / 8;
+
+   for (let i = -2; i <= 1; i++) {
+     const angle = baseAngle + (i * spread / 3);
+     bullets.push({
+       x: player.x,
+       y: player.y,
+       width: 8,
+       height: 15,
+       vx: Math.cos(angle) * speed,
+       vy: Math.sin(angle) * speed
+     });
+   }
+ }
+});
+
+canvas.addEventListener("mousemove", function(e) {
+ const rect = canvas.getBoundingClientRect();
+ mouseX = (e.clientX - rect.left) / scaleX;
+ mouseY = (e.clientY - rect.top) / scaleY;
+});
+
+function spawnEnemy(type = "green") {
+ if (type === "green") {
+   enemies.push({
+     x: Math.random() * mapWidth,
+     y: Math.random() * mapHeight,
+     radius: 10,
+     speed: 2,
+     type: "green"
+   });
+ }
+}
+
+function spawnEnemiesForWave() {
+ enemies.length = 0;
+ for (let i = 0; i < currentWave * 2 + 2; i++) spawnEnemy("green");
+ waveTimer = performance.now() + waveDuration;
+}
+
+function drawScaledCircle(x, y, radius, color) {
+ ctx.beginPath();
+ ctx.fillStyle = color;
+ ctx.arc(x * scaleX, y * scaleY, radius * ((scaleX + scaleY) / 2), 0, Math.PI * 2);
+ ctx.fill();
+}
+
+function gameLoop() {
+ ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+ if (showInstructions) {
+   ctx.fillStyle = "white";
+   ctx.font = "30px Arial";
+   ctx.fillText("How to Play:", 50, 100);
+   ctx.font = "20px Arial";
+   ctx.fillText("- Use W A S D or Arrow Keys to move", 50, 140);
+   ctx.fillText("- Move the mouse to aim", 50, 170);
+   ctx.fillText("- Press SPACE to shoot (4-bullet spread)", 50, 200);
+   ctx.fillText("- Survive waves of enemies", 50, 230);
+   ctx.fillText("- Collect power-ups for bonuses", 50, 260);
+   ctx.fillText("Press ENTER to Start", 50, 320);
+   requestAnimationFrame(gameLoop);
+   return;
+ }
+
+ if (keys["w"] || keys["arrowup"]) player.y -= player.speed;
+ if (keys["s"] || keys["arrowdown"]) player.y += player.speed;
+ if (keys["a"] || keys["arrowleft"]) player.x -= player.speed;
+ if (keys["d"] || keys["arrowright"]) player.x += player.speed;
+
+ player.x = Math.max(player.size / 2, Math.min(mapWidth - player.size / 2, player.x));
+ player.y = Math.max(player.size / 2, Math.min(mapHeight - player.size / 2, player.y));
+
+ const now = performance.now();
+ if (speedBoostTime > now) player.speed = 10;
+ else player.speed = 7;
+ if (rapidFireTime > now) bulletCooldown = false;
+
+ ctx.fillStyle = forceFieldTime > now ? "lightgreen" : player.color;
+ ctx.beginPath();
+ ctx.arc(player.x * scaleX, player.y * scaleY, player.size * ((scaleX + scaleY) / 2) / 2, 0, Math.PI * 2);
+ ctx.fill();
+
+ enemies.forEach((enemy, i) => {
+   const dx = player.x - enemy.x;
+   const dy = player.y - enemy.y;
+   const dist = Math.hypot(dx, dy);
+
+   if (dist > 0) {
+     enemy.x += (dx / dist) * enemy.speed;
+     enemy.y += (dy / dist) * enemy.speed;
+   }
+
+   drawScaledCircle(enemy.x, enemy.y, enemy.radius, "green");
+
+   if (dist < enemy.radius + player.size / 2 && forceFieldTime < now) {
+     player.health--;
+     enemies.splice(i, 1);
+   }
+ });
+
+ bullets.forEach((b, i) => {
+   b.x += b.vx;
+   b.y += b.vy;
+   ctx.fillStyle = "white";
+   ctx.fillRect(b.x * scaleX, b.y * scaleY, b.width * ((scaleX + scaleY) / 2), b.height * ((scaleX + scaleY) / 2));
+   if (b.x < 0 || b.x > mapWidth || b.y < 0 || b.y > mapHeight) bullets.splice(i, 1);
+
+   enemies.forEach((enemy, ei) => {
+     const dist = Math.hypot(enemy.x - b.x, enemy.y - b.y);
+     if (dist < enemy.radius) {
+       bullets.splice(i, 1);
+       enemies.splice(ei, 1);
+     }
+   });
+ });
+
+ if (performance.now() > waveTimer) {
+   currentWave++;
+   if (currentWave > 100) currentWave = 100;
+   spawnEnemiesForWave();
+ }
+
+ ctx.fillStyle = "white";
+ ctx.font = "20px Arial";
+ ctx.fillText("Health: " + player.health, 10, 30);
+ ctx.fillText("Wave: " + currentWave, 10, 60);
+
+ if (player.health <= 0) {
+   ctx.fillStyle = "red";
+   ctx.font = "50px Arial";
+   ctx.fillText("Game Over", canvas.width / 2 - 120, canvas.height / 2);
+   return;
+ }
+
+ requestAnimationFrame(gameLoop);
+}
+
+gameLoop();
+</script>
+</body>
+</html>

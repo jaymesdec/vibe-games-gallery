@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Water Animal Memory Game</title>
   <style>
@@ -173,6 +173,59 @@
       }, 1000);
     }
 
+    function showAnimals(selected, mode) {
+      container.innerHTML = "";
+      let inputLocked = false;
+      selected.forEach(animal => {
+        const div = document.createElement("div");
+        div.className = "animal";
+        div.innerHTML = `<img src="${animal.image}" alt="${animal.name}">`;
+        div.onclick = () => {
+          if (inputLocked) return;
+          userSequence.push(animal.name);
+          playSound(animal.name);
+          if (userSequence.length === sequence.length) {
+            inputLocked = true;
+            if (JSON.stringify(userSequence) === JSON.stringify(sequence)) {
+              score++;
+              message.textContent = "Correct sequence!";
+              addNextRoundButton();
+            } else {
+              message.textContent = "Wrong sequence.";
+            }
+            updateScore();
+          }
+        };
+        container.appendChild(div);
+      });
+      const replayButton = document.createElement("button");
+      replayButton.textContent = "Replay Sequence";
+      replayButton.onclick = () => replaySequence();
+      container.parentNode.insertBefore(replayButton, container);
+    }
+
+    function addNextRoundButton() {
+      const nextBtn = document.createElement("button");
+      nextBtn.textContent = "Next Round";
+      nextBtn.onclick = () => startRound();
+      container.parentNode.insertBefore(nextBtn, container.nextSibling);
+    }
+
+    function replaySequence() {
+      let i = 0;
+      message.textContent = "Replaying sequence...";
+      function playNext() {
+        if (i < sequence.length) {
+          playSound(sequence[i]);
+          i++;
+          setTimeout(playNext, 1000);
+        } else {
+          message.textContent = "Try the sequence again!";
+        }
+      }
+      playNext();
+    }
+
     function startRound() {
       resetGame();
       const mode = modeSelect.value;
@@ -198,17 +251,22 @@
       if (mode === "sequence") {
         sequence = selected.map(a => a.name);
         let i = 0;
+        message.textContent = "Listen to the sequence...";
         function playNext() {
           if (i < sequence.length) {
             playSound(sequence[i]);
             i++;
             setTimeout(playNext, 1000);
           } else {
+            message.textContent = "Now it's your turn!";
             showAnimals(selected, "sequence");
           }
         }
         playNext();
-      } else if (mode === "matching") {
+      }
+    
+      // Matching mode
+      else if (mode === "matching") {
         const cards = [...selected, ...selected].sort(() => Math.random() - 0.5);
         let flipped = [];
         cards.forEach(animal => {
@@ -227,6 +285,7 @@
                     flipped.forEach(f => f.classList.add("matched"));
                     score++;
                     message.textContent = "Matched!";
+                    addNextRoundButton();
                   } else {
                     flipped.forEach(f => f.innerHTML = `<img src="images/question.png" alt="?">`);
                     message.textContent = "Try again.";
@@ -239,7 +298,10 @@
           };
           container.appendChild(div);
         });
-      } else if (mode === "sound") {
+      }
+
+      // Sound mode
+      else if (mode === "sound") {
         const answer = selected[0];
         playSound(answer.name);
         selected.sort(() => Math.random() - 0.5).forEach(animal => {
@@ -250,6 +312,7 @@
             if (animal.name === answer.name) {
               score++;
               message.textContent = "Correct!";
+              addNextRoundButton();
             } else {
               message.textContent = "Wrong animal.";
             }
@@ -257,7 +320,10 @@
           };
           container.appendChild(div);
         });
-      } else if (mode === "location") {
+      }
+
+      // Location mode
+      else if (mode === "location") {
         selected.forEach(animal => {
           const div = document.createElement("div");
           div.className = "animal";
@@ -277,7 +343,8 @@
                 const correct = userSequence.every((name, i) => name === selected[i].name);
                 if (correct) {
                   score++;
-                  message.textContent = "Correct sequence!";
+                  message.textContent = "Correct order!";
+                  addNextRoundButton();
                 } else {
                   message.textContent = "Wrong order.";
                 }
